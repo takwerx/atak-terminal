@@ -145,6 +145,7 @@ cmd_up() {
   [ "${1:-}" = --no-window ] && window=0
   if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then notify "Starting ATAK"; fi
   android_up
+  location_refresh
   if atak_installed; then
     atak_running || atak_launch
   else

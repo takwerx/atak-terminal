@@ -374,6 +374,25 @@ location_set() {
   config_set LOCATION "$lat,$lon"; config_set LOCATION_ACCURACY "$acc"; config_set LOCATION_SOURCE "$source"
   ok "Position $lat, $lon (about $acc m, from $source). ATAK shows it as a GPS fix within a few seconds"
 }
+# The Mac's own Wi-Fi position, refreshed on every launch, because a laptop moves and a
+# rough public-IP fix is 5 km wrong. Run from the app bundle this is also what raises
+# macOS's "ATAK would like to use your location" prompt: Location Services is granted per
+# responsible process, and the bundle is the one a user can actually grant -- which is why
+# this lives on the launch path and not behind a terminal command.
+#
+# A position the user typed in by hand is never overwritten. A denial is silent and costs
+# nothing: maclocation returns immediately with kCLErrorDenied, and whatever position is
+# already set stays. Only a rough or previously-Mac-derived fix is upgraded.
+location_refresh() {
+  local src pos lat lon acc
+  src=$(config_get LOCATION_SOURCE)
+  case "$src" in you) return 0 ;; esac
+  pos=$(mac_location) || return 0
+  IFS=, read -r lat lon acc <<<"$pos"
+  [[ $lat =~ ^-?[0-9]+(\.[0-9]+)?$ && $lon =~ ^-?[0-9]+(\.[0-9]+)?$ ]] || return 0
+  location_set "$lat" "$lon" "${acc:-50}" "this Mac"
+}
+
 location_off() {
   vm_run "rm -f $LOCATION_FILE" >/dev/null 2>&1 || true
   config_unset LOCATION; config_unset LOCATION_ACCURACY; config_unset LOCATION_SOURCE
