@@ -148,7 +148,8 @@ container_create() {
   cpus=$(config_get VM_CPUS 2)
   if [ "$cpus" -ge 2 ]; then cpuset="--cpuset-cpus=1-$((cpus - 1))"; fi
   common="--name $CONTAINER_NAME --privileged $cpuset --memory ${capmb}m -v $VOLUME_NAME:/data -v /dev/binderfs/binder:/dev/binder -v /dev/binderfs/hwbinder:/dev/hwbinder -v /dev/binderfs/vndbinder:/dev/vndbinder"
-  boot="androidboot.redroid_width=$w androidboot.redroid_height=$h androidboot.redroid_dpi=$dpi androidboot.redroid_gpu_mode=guest androidboot.redroid_fps=30 androidboot.use_memfd=true"
+  local fps; fps=$(config_get MAX_FPS 60)
+  boot="androidboot.redroid_width=$w androidboot.redroid_height=$h androidboot.redroid_dpi=$dpi androidboot.redroid_gpu_mode=guest androidboot.redroid_fps=$fps androidboot.use_memfd=true"
   if [ "$mode" = bridged ]; then
     if container_create_lan "$common" "$boot" "$preset: ${w}x${h} at ${dpi} dpi"; then return 0; fi
     warn "Android is running behind NAT instead; fix the LAN and run 'takwerx network bridged' again"
@@ -353,7 +354,7 @@ window_open() {
     SCRCPY_SERVER_PATH="$SCRCPY_DIR/scrcpy-server" SCRCPY_ICON_PATH="$SCRCPY_DIR/scrcpy.png" ADB="$ADB" \
       "$bin" -s "$ADB_ENDPOINT" --window-title=ATAK \
         --mouse=sdk --mouse-bind=++++:bhsn "${kbflags[@]}" \
-        --no-audio --max-fps=30 --video-bit-rate=8M "$@" && rc=0 || rc=$?
+        --no-audio --max-fps="$(config_get MAX_FPS 60)" --video-bit-rate=8M "$@" && rc=0 || rc=$?
     if [ "$rc" != 2 ] || [ "$attempt" = 2 ]; then return "$rc"; fi
     # A deliberate `takwerx down` stops the VM; do not fight it. Anything else, bring it back.
     vm_running || return "$rc"
