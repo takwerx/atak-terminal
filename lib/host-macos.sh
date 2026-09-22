@@ -150,6 +150,10 @@ app_build() {
   <key>CFBundleIconFile</key><string>icon</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <!-- Required, or CoreLocation denies the request outright and the app never appears
+       in System Settings > Privacy & Security > Location Services, so there is no way
+       to grant it. This is what makes "takwerx location here" possible at all. -->
+  <key>NSLocationWhenInUseUsageDescription</key><string>Your Mac's position is sent to ATAK as its GPS fix, so the map knows where you are.</string>
 </dict>
 </plist>
 PLIST
