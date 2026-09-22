@@ -2,6 +2,27 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-22, later still: TAK portal enrols ATAK in the container, from the container
+
+- **The whole onboarding works inside the window, with no file ever touching the Mac.** Log
+  into TAK portal in the container's own browser, click **Open in app**, and ATAK comes to
+  the foreground already enrolled: certs in, `enable-channels.pref` written to
+  `/sdcard/atak/config/prefs/`, Channels populated, and an SSL connection up to
+  `takserver...:8089`. No data package to download, no `takwerx datapackage`, no certs
+  shuttled across the host boundary.
+- **The stock `org.chromium.webview_shell` is enough, and that was not obvious.** It is the
+  WebView Browser Tester that ships in the redroid image, it is already the default https
+  handler, and it is Chromium 125. It runs CloudTAK fine including `wss://`, and -- the part
+  worth recording -- it **does** follow `intent://` links, which is what portal's "Open in
+  app" fires. WebView normally ignores unknown schemes unless the host app implements
+  `shouldOverrideUrlLoading`, so the expectation was that this would fail and that Firefox or
+  Cromite would have to be sideloaded. It does not fail. Do not add a browser.
+- **There is already a landing page.** `com.android.launcher3` (QuickstepLauncher) is
+  installed and handles HOME, with a near-black wallpaper. From the window it is
+  **Shift+middle-click** (scrcpy's `--mouse-bind=++++:bhsn` puts HOME on shifted middle,
+  Back on shifted right, Recents on shifted 4th). Its Google search bar is dead weight --
+  there are no Play Services in redroid.
+
 ## 2026-09-22, later: the VM upgraded its own kernel and lost binder
 
 - Ubuntu's unattended-upgrades installed kernel 6.8.0-139 during the day. The next reboot
