@@ -1,0 +1,361 @@
+#!/usr/bin/env bash
+# takwerx: real ATAK in a window on your desktop.
+# One command installs it, one icon runs it. See README.md.
+set -euo pipefail
+
+resolve_self() {
+  local p=$1 d
+  while [ -L "$p" ]; do
+    d=$(cd "$(dirname "$p")" && pwd)
+    p=$(readlink "$p")
+    [[ $p = /* ]] || p="$d/$p"
+  done
+  cd "$(dirname "$p")" && pwd
+}
+TAKWERX_APP=$(resolve_self "${BASH_SOURCE[0]}")
+TAKWERX_VERSION=$(cat "$TAKWERX_APP/VERSION")
+
+# shellcheck source=lib/common.sh
+. "$TAKWERX_APP/lib/common.sh"
+case "$HOST_OS" in
+  macos) . "$TAKWERX_APP/lib/host-macos.sh" ;;
+  linux) die "Linux hosts are next on the list; macOS is supported today" ;;
+esac
+. "$TAKWERX_APP/lib/vm.sh"
+. "$TAKWERX_APP/lib/android.sh"
+
+usage() {
+  cat <<USAGE
+takwerx $TAKWERX_VERSION: ATAK on your desktop
+
+  takwerx init [--apk FILE] [--no-bridged] [--no-up]   install everything, then open ATAK
+  takwerx up [--no-window]                             start Android and open the ATAK window
+  takwerx down                                         stop Android and the VM, keep all data
+  takwerx restart                                      recreate Android (keeps data) and reopen the window
+  takwerx status                                       what is running, versions, network
+
+  takwerx apk [FILE]          install or replace ATAK (defaults to the newest in ~/Downloads)
+  takwerx plugin FILE         install a plugin APK
+  takwerx market              install the TAKWERX Market plugin matching your ATAK
+  takwerx datapackage FILE    import a data package zip
+  takwerx display PRESET      ultra | tablet | desktop | phone | WIDTHxHEIGHT@DPI, live
+  takwerx location WHERE      LAT,LON [ACCURACY_M] | here (this Mac's location) | ip (rough) | off
+  takwerx keyboard MODE       auto | uhid (hardware keyboard, at the Mac) | sdk (typed text, works over remote desktop)
+  takwerx network MODE        nat | bridged (bridged gives Android its own LAN address)
+
+  takwerx shell               adb shell into Android
+  takwerx vm-shell            shell into the Linux VM
+  takwerx screenshot [FILE]   save a PNG of the Android screen
+  takwerx logs [--android|--container]
+  takwerx doctor              check the host and report what is missing
+  takwerx reset               wipe Android (ATAK settings, certs, maps); keeps the VM
+  takwerx update              update takwerx and its pinned tools
+  takwerx uninstall           remove everything takwerx installed
+USAGE
+}
+
+require_installed() {
+  [ -x "$LIMACTL" ] || die "Not installed yet. Run: takwerx init"
+  vm_exists || die "No VM yet. Run: takwerx init"
+}
+
+# Bring Android up without opening the window; used by up, apk, plugin, market.
+android_up() {
+  require_installed
+  vm_start
+  container_start
+  if ! android_online || ! android_booted; then
+    step "Waiting for Android to boot"
+    android_wait 300 || die "Android did not come up within 5 minutes. Try: takwerx logs --container"
+  fi
+  ok "Android is up"
+  android_provision
+}
+
+# Latest Market release carries one APK per ATAK version; pick the one for the installed ATAK.
+market_install() {
+  local ver rel url apk
+  ver=$(atak_version | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)
+  if [ -z "$ver" ]; then warn "ATAK is not installed; Market is installed after ATAK"; return 0; fi
+  step "TAKWERX Market plugin for ATAK $ver"
+  if ! rel=$(curl -fsSL --max-time 20 "https://api.github.com/repos/takwerx/takwerx-market/releases/latest" 2>/dev/null); then
+    warn "Could not reach GitHub; run 'takwerx market' when online"; return 0
+  fi
+  url=$(printf '%s' "$rel" | grep -oE '"browser_download_url": *"[^"]*--'"$ver"'-civ-release\.apk"' | sed 's/.*"\(http[^"]*\)"/\1/' | head -n1)
+  if [ -z "$url" ]; then warn "No Market build for ATAK $ver in the latest release"; return 0; fi
+  apk="$TAKWERX_CACHE/$(basename "$url")"
+  download "$url" "$apk"
+  "$ADB" -s "$ADB_ENDPOINT" install -r -g "$apk" >/dev/null || { warn "Market install failed"; return 0; }
+  config_set MARKET_APK "$apk"
+  ok "Market $(basename "$apk" | sed -nE 's/.*Market-([0-9.]+)--.*/\1/p') installed"
+}
+
+cmd_init() {
+  local apk='' bridged=1 open=1 a pos lat lon acc
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --apk) apk=$2; shift ;;
+      --no-bridged) bridged=0 ;;
+      --no-up) open=0 ;;
+      *) die "Unknown option: $1" ;;
+    esac
+    shift
+  done
+  step "takwerx $TAKWERX_VERSION"
+  host_check
+  host_tools_install
+  path_setup
+  vm_defaults
+  if [ "$bridged" = 1 ] && [ "$(config_get NETWORK_MODE nat)" != bridged ]; then
+    bridged_setup || config_set NETWORK_MODE nat
+  fi
+  if vm_exists; then vm_start; else vm_create; vm_start; fi
+  vm_run "test -e /dev/binderfs/binder" || die "binder is missing inside the VM; see takwerx vm-shell and /var/log/cloud-init-output.log"
+  ok "binder available in the VM"
+  image_present || image_pull
+  app_build
+  container_start
+  step "Waiting for Android to boot the first time"
+  android_wait 300 || die "Android did not come up. Try: takwerx logs --container"
+  ok "Android is up"
+  android_provision
+  if [ -z "$apk" ] && ! atak_installed; then
+    a=$(find_atak_apk)
+    if [ -n "$a" ] && confirm "Found $(basename "$a") in Downloads. Install it?"; then apk=$a; fi
+  fi
+  if [ -n "$apk" ]; then atak_install "$apk"; market_install; fi
+  if [ -z "$(config_get LOCATION)" ]; then
+    step "Position for ATAK's self marker"
+    if pos=$(ip_location); then
+      IFS=, read -r lat lon acc <<<"$pos"; location_set "$lat" "$lon" "$acc" "public IP"
+      say "That is a rough fix. For a real one: takwerx location here (this Mac), or takwerx location LAT,LON"
+    else
+      warn "No position set; run 'takwerx location here' or 'takwerx location LAT,LON' so ATAK has a self marker"
+    fi
+  fi
+  if ! atak_installed; then
+    printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ then run:\n  takwerx apk ~/Downloads/ATAK-CIV-x.y.z.apk\n' "$BOLD" "$NC"
+  fi
+  printf '\n%sDone.%s %s.app is in %s; new terminals have the takwerx command.\n' "$GREEN" "$NC" "$APP_NAME" "$(dirname "$APP_DIR")"
+  if [ "$open" = 1 ]; then cmd_up; fi
+}
+
+cmd_up() {
+  local window=1
+  [ "${1:-}" = --no-window ] && window=0
+  if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then notify "Starting ATAK"; fi
+  android_up
+  if atak_installed; then
+    atak_running || atak_launch
+  else
+    warn "ATAK is not installed yet: takwerx apk /path/to/ATAK.apk"
+    if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then alert "ATAK is not installed yet. Download it from tak.gov and run: takwerx apk <file>"; fi
+  fi
+  if [ "$window" = 1 ]; then window_open; fi
+}
+
+cmd_restart() {
+  require_installed
+  vm_start
+  container_stop
+  container_remove
+  cmd_up "$@"
+}
+
+cmd_down() {
+  require_installed
+  if vm_running; then container_stop; fi
+  vm_stop
+  ok "Stopped. Data is kept; takwerx up brings it back"
+}
+
+cmd_apk() {
+  local apk=${1:-}
+  if [ -z "$apk" ]; then apk=$(find_atak_apk); fi
+  [ -n "$apk" ] || die "No ATAK APK given and none found in ~/Downloads"
+  android_up
+  atak_install "$apk"
+  market_install
+  say "Run 'takwerx up' to open it."
+}
+
+cmd_plugin()      { [ -n "${1:-}" ] || die "Usage: takwerx plugin FILE.apk"; android_up; plugin_install "$1"; }
+cmd_market()      { android_up; market_install; }
+cmd_datapackage() { [ -n "${1:-}" ] || die "Usage: takwerx datapackage FILE.zip"; android_up; datapackage_install "$1"; }
+cmd_display()     { [ -n "${1:-}" ] || die "Usage: takwerx display ultra|tablet|desktop|phone|WxH@DPI"; android_up; display_apply "$1"; }
+
+cmd_location() {
+  local arg=${1:-status} pos lat lon acc
+  require_installed
+  case "$arg" in
+    status)
+      if [ -n "$(config_get LOCATION)" ]; then
+        printf 'Position: %s (about %s m, from %s)\n' "$(config_get LOCATION)" "$(config_get LOCATION_ACCURACY)" "$(config_get LOCATION_SOURCE)"
+      else
+        printf 'No position set. ATAK reports no location until you run one of:\n  takwerx location LAT,LON\n  takwerx location here\n  takwerx location ip\n'
+      fi
+      return 0 ;;
+    off) location_off; return 0 ;;
+    here)
+      pos=$(mac_location) || die "Could not get this Mac's location. Allow Location for your terminal (or ATAK) in System Settings > Privacy & Security > Location Services, then try again, or use: takwerx location LAT,LON"
+      IFS=, read -r lat lon acc <<<"$pos"; location_set "$lat" "$lon" "${acc:-50}" "this Mac" ;;
+    ip)
+      pos=$(ip_location) || die "Could not look up a position from the public IP"
+      IFS=, read -r lat lon acc <<<"$pos"; location_set "$lat" "$lon" "$acc" "public IP" ;;
+    *)
+      pos=${arg/ /,}; IFS=, read -r lat lon <<<"$pos"; acc=${2:-10}
+      [[ $lat =~ ^-?[0-9]+(\.[0-9]+)?$ && $lon =~ ^-?[0-9]+(\.[0-9]+)?$ && $acc =~ ^[0-9]+$ ]] || die "Usage: takwerx location LAT,LON [ACCURACY_M] | here | ip | off"
+      location_set "$lat" "$lon" "$acc" "you" ;;
+  esac
+}
+
+cmd_keyboard() {
+  case "${1:-}" in
+    auto|uhid|sdk) config_set KEYBOARD_MODE "$1"; ok "Keyboard mode: $1. Close and reopen the ATAK window to apply" ;;
+    "") printf 'Keyboard mode: %s\n' "$(config_get KEYBOARD_MODE auto)" ;;
+    *) die "Usage: takwerx keyboard auto|uhid|sdk" ;;
+  esac
+}
+
+cmd_network() {
+  local mode=${1:-}
+  require_installed
+  case "$mode" in
+    bridged)
+      # Already installed: only refresh the interface and skip the password prompt.
+      if bridged_ready; then
+        write_networks_yaml "$(default_interface)"
+        config_set NETWORK_MODE bridged
+        config_set BRIDGE_INTERFACE "$(default_interface)"
+        ok "Bridged networking already installed (interface $(default_interface))"
+      else
+        bridged_setup || die "Bridged networking was not set up"
+      fi
+      ;;
+    nat) config_set NETWORK_MODE nat ;;
+    *) die "Usage: takwerx network nat|bridged" ;;
+  esac
+  if vm_running; then container_stop; container_remove; fi
+  vm_stop
+  vm_set_network "$mode" || die "Could not change the VM network"
+  vm_start
+  ok "Network mode: $mode. 'takwerx up' recreates Android in this mode"
+}
+
+cmd_status() {
+  printf '%stakwerx %s%s\n' "$BOLD" "$TAKWERX_VERSION" "$NC"
+  printf '  VM:       %s' "$(vm_status)"
+  if vm_exists; then printf ', %s CPUs, %s, network %s' "$(config_get VM_CPUS)" "$(config_get VM_MEMORY)" "$(config_get NETWORK_MODE nat)"; fi
+  if vm_running; then printf ', ip %s' "$(vm_ip)"; fi
+  printf '\n'
+  if vm_running; then
+    if container_running; then
+      printf '  Android:  running, adb %s, display %s' "$(android_state)" "$(config_get DISPLAY_PRESET tablet)"
+      if [ "$(config_get CONTAINER_MODE nat)" = bridged ]; then printf ', LAN address %s (MAC %s)' "$(config_get ANDROID_IP)" "$(config_get ANDROID_MAC)"; else printf ', behind NAT'; fi
+      printf '\n'
+    else printf '  Android:  stopped\n'; fi
+    if android_online; then
+      if atak_installed; then printf '  ATAK:     %s%s\n' "$(atak_version)" "$(atak_running && printf ', running')"; else printf '  ATAK:     not installed\n'; fi
+      if [ -n "$(config_get MARKET_APK)" ]; then printf '  Market:   %s\n' "$(basename "$(config_get MARKET_APK)")"; fi
+    fi
+  fi
+  if [ -n "$(config_get LOCATION)" ]; then printf '  Position: %s (about %s m, from %s)\n' "$(config_get LOCATION)" "$(config_get LOCATION_ACCURACY)" "$(config_get LOCATION_SOURCE)"; else printf '  Position: none (takwerx location ...)\n'; fi
+  printf '  App:      %s\n  Logs:     %s\n' "$APP_DIR" "$LOG_FILE"
+}
+
+cmd_doctor() {
+  step "Host"
+  host_doctor
+  step "VM and Android"
+  case "$(vm_status)" in
+    Missing) warn "VM not created yet (takwerx init)" ;;
+    Running) ok "VM running"
+      if vm_run "test -e /dev/binderfs/binder" 2>/dev/null; then ok "binder present in the VM"; else warn "binder missing in the VM"; fi
+      if image_present; then ok "Android image present"; else warn "Android image not pulled"; fi
+      if container_running; then ok "Android container running"; else warn "Android container not running (takwerx up)"; fi
+      if android_online; then ok "adb connected"; else warn "adb not connected"; fi
+      if android_online && atak_installed; then ok "ATAK $(atak_version)"; else warn "ATAK not installed (takwerx apk)"; fi ;;
+    *) warn "VM is $(vm_status) (takwerx up)" ;;
+  esac
+}
+
+cmd_reset() {
+  require_installed
+  confirm "This wipes Android: ATAK settings, server connections, certificates, maps and plugins. Continue?" || { say "Cancelled."; return 0; }
+  vm_start
+  container_stop
+  container_remove
+  volume_remove
+  config_unset ATAK_APK; config_unset MARKET_APK
+  ok "Android wiped. 'takwerx up' starts clean, then 'takwerx apk' reinstalls ATAK"
+}
+
+cmd_update() {
+  step "Updating takwerx"
+  if [ -d "$TAKWERX_APP/.git" ]; then
+    git -C "$TAKWERX_APP" pull --ff-only || die "git pull failed"
+  else
+    local repo=${TAKWERX_REPO:-takwerx/takwerx-desktop} branch=${TAKWERX_BRANCH:-main} new="$TAKWERX_APP.new"
+    curl -fsSL "https://github.com/$repo/archive/refs/heads/$branch.tar.gz" -o "$TAKWERX_CACHE/app.tar.gz" || die "Download failed"
+    rm -rf "$new"; mkdir -p "$new"; tar -xzf "$TAKWERX_CACHE/app.tar.gz" -C "$new" --strip-components=1
+    rm -rf "$TAKWERX_APP.old"; mv "$TAKWERX_APP" "$TAKWERX_APP.old"; mv "$new" "$TAKWERX_APP"; rm -rf "$TAKWERX_APP.old"
+  fi
+  exec "$TAKWERX_APP/takwerx" init --no-up --no-bridged
+}
+
+cmd_uninstall() {
+  confirm "Remove the VM, Android and everything under $TAKWERX_ROOT, plus $APP_DIR?" || { say "Cancelled."; return 0; }
+  if [ -x "$LIMACTL" ]; then vm_delete; fi
+  app_remove
+  bridged_remove
+  rm -rf "$TAKWERX_ROOT"
+  ok "Removed. The PATH line in your shell profile is harmless and can be deleted by hand."
+}
+
+cmd_logs() {
+  case "${1:-}" in
+    --android)   android_online || die "Android is not running"; adb_ logcat -d -t 500 ;;
+    --container) vm_running || die "VM is not running"; container_logs 300 ;;
+    *) tail -n 100 "$LOG_FILE" ;;
+  esac
+}
+
+cmd_screenshot() {
+  local out=${1:-$HOME/Desktop/atak-$(date +%Y%m%d-%H%M%S).png}
+  android_online || die "Android is not running"
+  adb_ exec-out screencap -p >"$out" || die "screencap failed"
+  ok "$out"
+}
+
+main() {
+  local cmd=${1:-help}
+  [ $# -gt 0 ] && shift
+  log "takwerx $cmd $*"
+  case "$cmd" in
+    init)        cmd_init "$@" ;;
+    up)          cmd_up "$@" ;;
+    down)        cmd_down ;;
+    restart)     cmd_restart "$@" ;;
+    status)      cmd_status ;;
+    doctor)      cmd_doctor ;;
+    apk)         cmd_apk "$@" ;;
+    plugin)      cmd_plugin "$@" ;;
+    market)      cmd_market ;;
+    datapackage) cmd_datapackage "$@" ;;
+    display)     cmd_display "$@" ;;
+    location)    cmd_location "$@" ;;
+    keyboard)    cmd_keyboard "$@" ;;
+    network)     cmd_network "$@" ;;
+    shell)       require_installed; exec "$ADB" -s "$ADB_ENDPOINT" shell "$@" ;;
+    vm-shell)    require_installed; vm_shell ;;
+    screenshot)  cmd_screenshot "$@" ;;
+    logs)        cmd_logs "$@" ;;
+    reset)       cmd_reset ;;
+    update)      cmd_update ;;
+    uninstall)   cmd_uninstall ;;
+    version)     printf '%s\n' "$TAKWERX_VERSION" ;;
+    help|-h|--help) usage ;;
+    *) usage; die "Unknown command: $cmd" ;;
+  esac
+}
+main "$@"

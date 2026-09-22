@@ -1,0 +1,231 @@
+# TAKWERX desktop runtime VM. Rendered by `takwerx init`; do not edit by hand.
+# Ubuntu 24.04 under Apple's Virtualization.framework, with binder loaded as a
+# module so the stock redroid images find /dev/binder, and podman as the runtime.
+minimumLimaVersion: 2.0.0
+base:
+- template:_images/ubuntu-24.04
+vmType: vz
+cpus: @CPUS@
+memory: "@MEMORY@"
+disk: "@DISK@"
+# Nothing from the Mac is mounted into the VM. APKs and data packages reach
+# Android over adb from the host, never through the VM filesystem.
+mounts: []
+containerd:
+  system: false
+  user: false
+provision:
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eu -o pipefail
+    if [ -e /etc/takwerx-provisioned ]; then exit 0; fi
+    export DEBIAN_FRONTEND=noninteractive
+    APT="apt-get -o DPkg::Lock::Timeout=600 -qq"
+    $APT update
+    $APT install -y podman busybox-static systemd-zram-generator "linux-modules-extra-$(uname -r)"
+    # This VM is an appliance: an unattended kernel upgrade would boot a kernel that has no
+    # modules-extra (no binder) installed. takwerx update handles upgrades deliberately.
+    systemctl disable --now unattended-upgrades >/dev/null 2>&1 || true
+    apt-mark hold linux-virtual linux-image-virtual linux-headers-virtual >/dev/null 2>&1 || true
+    # Compressed swap in RAM: a pressure valve so memory spikes slow things down instead of
+    # letting the OOM killer take out the VM's own services.
+    printf '[zram0]\nzram-size = ram / 2\ncompression-algorithm = zstd\n' >/etc/systemd/zram-generator.conf
+    systemctl daemon-reload; systemctl start systemd-zram-setup@zram0.service || true
+    # Ubuntu builds binder with binderfs, so the module's devices= parameter only creates
+    # devices inside a binderfs mount. The nodes are bind-mounted into the container as
+    # /dev/binder, /dev/hwbinder and /dev/vndbinder, which is what the redroid images expect.
+    echo 'options binder_linux devices=binder,hwbinder,vndbinder' >/etc/modprobe.d/takwerx-binder.conf
+    printf 'binder_linux\nuhid\n' >/etc/modules-load.d/takwerx.conf
+    modprobe binder_linux
+    modprobe uhid   # HID keyboard and mouse for scrcpy
+    cat >/etc/systemd/system/dev-binderfs.mount <<'UNIT'
+    [Unit]
+    Description=binderfs: Android binder devices for redroid
+    After=systemd-modules-load.service
+    [Mount]
+    What=binder
+    Where=/dev/binderfs
+    Type=binder
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
+    # binderfs creates its nodes 0600 root, and nothing inside Android can widen that
+    # (ueventd never sees them), so Android's system user could not open binder.
+    cat >/etc/systemd/system/takwerx-binderfs.service <<'UNIT'
+    [Unit]
+    Description=binderfs node permissions for redroid
+    Requires=dev-binderfs.mount
+    After=dev-binderfs.mount
+    [Service]
+    Type=oneshot
+    ExecStart=/bin/chmod 666 /dev/binderfs/binder /dev/binderfs/hwbinder /dev/binderfs/vndbinder
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
+    systemctl daemon-reload
+    systemctl enable --now dev-binderfs.mount takwerx-binderfs.service
+    ls -l /dev/binderfs/binder /dev/binderfs/hwbinder /dev/binderfs/vndbinder
+    # DHCP hook used when Android runs on the LAN (bridged mode): takwerx obtains the lease
+    # inside the container's network namespace before Android boots.
+    mkdir -p /usr/local/lib/takwerx
+    cat >/usr/local/lib/takwerx/udhcpc.script <<'HOOK'
+    #!/bin/sh
+    # udhcpc hook run inside the Android container's network namespace by takwerx.
+    case "$1" in
+      bound|renew)
+        busybox ip addr add "$ip/$mask" dev "$interface" 2>/dev/null
+        busybox ip link set "$interface" up
+        [ -n "${router:-}" ] && busybox ip route replace default via "${router%% *}" dev "$interface"
+        printf "%s %s %s %s\n" "$ip" "$mask" "${router:-}" "${dns:-}" >"/run/takwerx-lease"
+        ;;
+    esac
+    HOOK
+    chmod +x /usr/local/lib/takwerx/udhcpc.script
+    # Position feeder for ATAK: NMEA over UDP 4349 (see nmea.py); `takwerx location` writes the position.
+    mkdir -p /etc/takwerx
+    cat >/usr/local/lib/takwerx/nmea.py <<'NMEA'
+    #!/usr/bin/env python3
+    """takwerx NMEA feeder. Streams GGA and RMC sentences for the position in
+    /etc/takwerx/location ("lat lon accuracy_m") to ATAK's NMEA input on UDP 4349 once a
+    second, the same path a Bluetooth or USB GPS uses. Runs inside the container's network
+    namespace (nsenter) so 127.0.0.1 is Android. Exits after SECONDS so the caller can
+    re-resolve the namespace, or at once when the position file is gone."""
+    import datetime, os, socket, sys, time
+
+    LOCATION = "/etc/takwerx/location"
+    seconds = int(sys.argv[1]) if len(sys.argv) > 1 else 30
+
+    def dm(v, is_lat):
+        d = int(abs(v)); m = (abs(v) - d) * 60
+        s = f"{d:02d}{m:07.4f}" if is_lat else f"{d:03d}{m:07.4f}"
+        h = ("N" if v >= 0 else "S") if is_lat else ("E" if v >= 0 else "W")
+        return s, h
+
+    def checksum(body):
+        c = 0
+        for ch in body: c ^= ord(ch)
+        return f"{c:02X}"
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    end = time.time() + seconds
+    while time.time() < end:
+        try:
+            with open(LOCATION) as f:
+                parts = f.read().split()
+            lat, lon = float(parts[0]), float(parts[1])
+            acc = float(parts[2]) if len(parts) > 2 else 10.0
+        except (OSError, ValueError, IndexError):
+            sys.exit(0)
+        hdop = max(0.5, acc / 4.0)          # ATAK derives its error circle from HDOP
+        now = datetime.datetime.now(datetime.timezone.utc)
+        t, d = now.strftime("%H%M%S.00"), now.strftime("%d%m%y")
+        la, lah = dm(lat, True); lo, loh = dm(lon, False)
+        sats = 8 if acc <= 50 else 4
+        for body in (f"GPGGA,{t},{la},{lah},{lo},{loh},1,{sats:02d},{hdop:.1f},,M,,M,,",
+                     f"GPRMC,{t},A,{la},{lah},{lo},{loh},0.0,0.0,{d},,,A"):
+            try:
+                sock.sendto(f"${body}*{checksum(body)}\r\n".encode(), ("127.0.0.1", 4349))
+            except OSError:
+                sys.exit(1)
+        time.sleep(1)
+    NMEA
+    cat >/usr/local/lib/takwerx/location-feeder.sh <<'FEEDER'
+    #!/bin/bash
+    # Streams the position in /etc/takwerx/location to ATAK as NMEA on UDP 4349 (see nmea.py),
+    # inside the Android container's network namespace. Re-resolves the namespace every 30 s so a
+    # recreated container is picked up automatically.
+    C=takwerx-atak
+    while true; do
+      if [ -s /etc/takwerx/location ] && [ "$(podman inspect -f "{{.State.Running}}" $C 2>/dev/null)" = true ]; then
+        NS=$(podman inspect -f "{{.NetworkSettings.SandboxKey}}" $C 2>/dev/null)
+        if [ -n "$NS" ]; then nsenter --net="$NS" python3 /usr/local/lib/takwerx/nmea.py 30 || true; fi
+      fi
+      sleep 3
+    done
+    FEEDER
+    chmod +x /usr/local/lib/takwerx/location-feeder.sh
+    cat >/etc/systemd/system/takwerx-location.service <<'UNIT'
+    [Unit]
+    Description=takwerx: feed a position to Android's GPS provider
+    After=network.target
+    [Service]
+    ExecStart=/usr/local/lib/takwerx/location-feeder.sh
+    Restart=always
+    RestartSec=5
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
+    # adb relay (see adb-relay.py): the Mac reaches Android's adb through Lima's loopback
+    # forward, never across the LAN, so no macOS Local Network permission is involved.
+    cat >/usr/local/lib/takwerx/adb-relay.py <<'RELAY'
+    #!/usr/bin/env python3
+    """takwerx adb relay. Listens on 127.0.0.1:5555 in the VM (which Lima forwards to the Mac)
+    and pipes each connection to Android's adb on the LAN address in /run/takwerx-lease. Only
+    listens while a lease exists, so it never collides with the NAT-mode port publish."""
+    import asyncio, os
+    LEASE = "/run/takwerx-lease"
+    def target():
+        try:
+            with open(LEASE) as f: return f.read().split()[0]
+        except (OSError, IndexError): return None
+    async def pipe(r, w):
+        try:
+            while True:
+                data = await r.read(65536)
+                if not data: break
+                w.write(data); await w.drain()
+        except (ConnectionError, asyncio.CancelledError): pass
+        finally:
+            try: w.close()
+            except Exception: pass
+    async def handle(cr, cw):
+        ip = target()
+        if not ip: cw.close(); return
+        try: rr, rw = await asyncio.wait_for(asyncio.open_connection(ip, 5555), 10)
+        except (OSError, asyncio.TimeoutError): cw.close(); return
+        await asyncio.gather(pipe(cr, rw), pipe(rr, cw))
+    async def main():
+        server = None
+        while True:
+            if target() and server is None:
+                try: server = await asyncio.start_server(handle, "127.0.0.1", 5555)
+                except OSError: server = None
+            elif not target() and server is not None:
+                server.close(); await server.wait_closed(); server = None
+            await asyncio.sleep(2)
+    asyncio.run(main())
+    RELAY
+    cat >/etc/systemd/system/takwerx-adb-relay.service <<'UNIT'
+    [Unit]
+    Description=takwerx: relay 127.0.0.1:5555 to Android adb on the LAN (bridged mode)
+    After=network.target
+    [Service]
+    ExecStart=/usr/bin/python3 /usr/local/lib/takwerx/adb-relay.py
+    Restart=always
+    RestartSec=3
+    [Install]
+    WantedBy=multi-user.target
+    UNIT
+    systemctl daemon-reload
+    systemctl enable --now takwerx-location.service takwerx-adb-relay.service
+    touch /etc/takwerx-provisioned
+probes:
+- description: binder and podman ready
+  script: |
+    #!/bin/bash
+    set -eu -o pipefail
+    if ! timeout 600s bash -c "until [ -e /dev/binderfs/binder ] && command -v podman >/dev/null; do sleep 3; done"; then
+      echo >&2 "binder or podman not ready"
+      exit 1
+    fi
+  hint: See /var/log/cloud-init-output.log in the guest (takwerx vm-shell)
+# Only adb is forwarded, and only on the Mac's loopback. Redroid's adbd has no
+# authentication, so it must never be reachable from the LAN.
+portForwards:
+- guestIP: 127.0.0.1
+  guestPort: 5555
+  hostIP: 127.0.0.1
+  hostPort: 5555
+- guestPortRange: [1, 65535]
+  ignore: true
