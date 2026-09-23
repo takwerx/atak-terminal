@@ -2,6 +2,42 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-22, night: the native Android Emulator has the GPU, and ATAK will not run on it
+
+A proposal arrived to drop redroid and run Google's Android Emulator natively on macOS,
+on the grounds that it reaches the Apple GPU without a VM in the way. The first half is
+true. The second half is where it dies.
+
+- **The AVD really does get the Apple GPU.** `-gpu host` on an arm64 image reports, from
+  inside Android: `GLES: Google (Apple), Android Emulator OpenGL ES Translator (Apple
+  M2 Max), OpenGL ES 3.0 (4.1 Metal - 90.5)`. Boot is about 14 seconds and ATAK installs
+  in 10. Against redroid's `ANGLE (SwiftShader Device)` this is the real thing.
+- **ATAK crashes on it before drawing a frame.** `FATAL EXCEPTION: GLThread /
+  java.lang.IllegalArgumentException: No config chosen`, from
+  `GLSurfaceView$BaseConfigChooser.chooseConfig`. Reproduced on android-34 and android-35,
+  `google_apis`, `-gpu host` and `-gpu guest`.
+- **The reason is one attribute.** `GLMapSurface.setConfigChooser` asks for
+  `EGL_BUFFER_SIZE 16, EGL_DEPTH_SIZE 8, EGL_STENCIL_SIZE 1`. The Metal GL translator
+  offers no config with a stencil buffer, so `eglChooseConfig` returns nothing and ATAK
+  dies. It also caps at OpenGL ES 3.0.
+- **ATAK runs fine under ANGLE**, which publishes a full config set and ES 3.1:
+  `-gpu swangle` boots ATAK with no crash. That isolates it -- the problem is the
+  translator's config list, not ATAK, not the image, not the emulator.
+- **But ANGLE on this emulator is always backed by SwiftShader.** `-gpu swangle` says so
+  outright, and `-gpu host -feature ForceANGLE` still comes up
+  `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device))`. There is no ANGLE-on-Metal mode:
+  `-help-gpu` lists only `auto`, `host`, `swiftshader`, `swangle`.
+- **So the AVD gives the GPU without ATAK, or ATAK without the GPU.** Taking ATAK means
+  SwiftShader, which is what redroid already does -- while also giving up the real LAN
+  address and multicast that the AVD's user-mode NAT cannot provide, and which
+  PROJECT_BRIEF calls the load-bearing assumption. There is nothing to gain by switching.
+- Re-test if either changes: an emulator build that pairs ANGLE with Metal, or an ATAK
+  that accepts a config without stencil. The second is a one-line change in
+  `GLMapSurface` and would be worth raising with the TAK Product Center.
+- Incidental: the `google_apis` images ship Chrome, and the emulator's own `-gpu` default
+  on a stock AVD is `swiftshader_indirect` -- the existing `atak58` AVD on this machine
+  had been measured on software rendering without anyone noticing.
+
 ## 2026-09-22, evening: the GPU spike, run properly. It gets further than the notes say, and still fails
 
 Panning ATAK at the operator's working view measured **2.9 fps**. Labels off took it to
