@@ -2,6 +2,47 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-22, evening: the GPU spike, run properly. It gets further than the notes say, and still fails
+
+Panning ATAK at the operator's working view measured **2.9 fps**. Labels off took it to
+22.6; resolution, the frame cap and core count then changed nothing (22.5 to 22.8 fps
+across a 2.6x change in pixel count, 3.8 of 7 cores busy). The per-object cost of ~600
+features sets the frame rate, and SwiftShader is why. So the GPU question stopped being a
+second spike and became the only remaining lever.
+
+- **The recorded blocker is wrong and should not stop anyone again.** This file said the
+  krunkit path "needs zink in redroid's Mesa build". redroid 14.0.0_64only already ships
+  the whole stack: `/vendor/lib64/dri/zink_dri.so`, `virtio_gpu_dri.so`,
+  `/vendor/lib64/hw/vulkan.virtio.so` (venus), `libEGL_mesa.so`, `gralloc.gbm.so`,
+  `libgbm.so.1`. Nothing needs rebuilding on the Android side.
+- **krunkit does give a Linux guest a GPU, which `vz` cannot.** `brew tap slp/krun`,
+  Lima 2.2 has the driver. The guest gets `/dev/dri/card0` and `renderD128`, virtio_gpu
+  loads with `+virgl +resource_blob +host_visible +context_init`.
+- **Lima never asks for one.** Its krunkit driver passes virtio-serial, virtio-blk,
+  virtio-vsock and virtio-net, and no virtio-gpu, so the guest gets a stub. krunkit does
+  accept `--device virtio-gpu,width=,height=` -- width and height are its only arguments
+  -- and a shim on `PATH` that appends it is enough to get a real device attached.
+- **It still does not work, and this is where it dies.** With a real virtio-gpu attached,
+  every 3D context creation is refused: `[drm:virtio_gpu_dequeue_ctrl_func] *ERROR*
+  response 0x1200 (command 0x200)`, i.e. CTX_CREATE rejected, plus `[drm] *ERROR* Failed
+  to register client: -95` (EOPNOTSUPP). The venus capset is advertised but empty
+  (`cap set 2: id 4, max-version 0, max-size 0`); only the virgl capsets are populated.
+  Guest Mesa falls back to llvmpipe.
+- **redroid does the right thing and then cannot start.** With `redroid_gpu_mode=host` and
+  `/dev/dri` passed in, it flips to `ro.hardware.egl=mesa` and `ro.hardware.gralloc=gbm`
+  instead of `angle`/`redroid`. zygote comes up, **SurfaceFlinger never does**, because
+  there is no 3D context for it to use. Boot never completes.
+- **So the blocker has moved, from redroid's Mesa to libkrun's virtio-gpu on macOS.**
+  Measured with krunkit 1.3.2, libkrun 1.19.4, libkrunfw 5.5.0, virglrenderer 1.3.0 on
+  macOS 26.5 arm64. libkrun drives the device through `rutabaga_gfx::virgl_renderer`,
+  which wants a host GL context; macOS has no usable one. Re-test when krunkit or
+  virglrenderer moves, and check venus rather than virgl -- an empty venus capset with a
+  populated virgl one suggests venus is the path being built out.
+- The test instance was a throwaway Lima VM alongside `takwerx`, deleted afterwards. The
+  working VM was never touched. One driver per VM still holds: a stale `takwerx up`
+  process recreated the Android container from its own in-memory copy of the engine
+  mid-experiment, which is how a 60 fps change silently came back as 30.
+
 ## 2026-09-22, later still: TAK portal enrols ATAK in the container, from the container
 
 - **The whole onboarding works inside the window, with no file ever touching the Mac.** Log
