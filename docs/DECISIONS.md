@@ -32,6 +32,20 @@ second spike and became the only remaining lever.
   `/dev/dri` passed in, it flips to `ro.hardware.egl=mesa` and `ro.hardware.gralloc=gbm`
   instead of `angle`/`redroid`. zygote comes up, **SurfaceFlinger never does**, because
   there is no 3D context for it to use. Boot never completes.
+- **Settled: the macOS GPU is compute-only, and this is documented, not inferred.** Podman
+  Desktop's own GPU page states it outright: "the virtualized GPU (Virtio-GPU Venus) only
+  supports vulkan compute shaders, **not rendering / draw**"
+  (<https://podman-desktop.io/docs/podman/gpu>). That is the whole answer. The libkrun GPU
+  path exists and is real -- llama.cpp reports a 40x speedup on it -- because inference is
+  compute. A map is draw. ATAK gets nothing from it, and no amount of configuration
+  changes that. Do not spend another evening here.
+- Two dead ends found on the way, recorded so nobody repeats them: Lima's krunkit docs say
+  Fedora is required rather than Ubuntu (it makes no difference -- the venus capset is
+  empty on both); and the guest needs patched Mesa from `dnf copr enable slp/mesa-libkrun-vulkan`
+  for venus at all, which was never worth chasing once compute-only was established.
+- Homebrew's QEMU on macOS is also out: `qemu-system-aarch64 -device help` offers only
+  `virtio-gpu-pci`/`virtio-gpu-device`, no `virtio-gpu-gl`, and no GL display backend.
+  UTM ships its own patched build; stock brew does not.
 - **So the blocker has moved, from redroid's Mesa to libkrun's virtio-gpu on macOS.**
   Measured with krunkit 1.3.2, libkrun 1.19.4, libkrunfw 5.5.0, virglrenderer 1.3.0 on
   macOS 26.5 arm64. libkrun drives the device through `rutabaga_gfx::virgl_renderer`,
