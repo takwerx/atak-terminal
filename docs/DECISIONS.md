@@ -21,6 +21,13 @@ one of these five lines was a separate hour:
     # 4. Android's own suppression of the on-screen keyboard
     adb shell settings put secure show_ime_with_hard_keyboard 0
 
+    # 4b. layout room. dp = px * 160 / dpi, and dp is what ATAK's toolbar counts in.
+    #     A stock phone profile at 1920x1200 @ 200 dpi is 1536x960 dp and drops toolbar
+    #     slots; at 150 dpi the same pixels give 2048x1280 dp, matching the redroid
+    #     tablet preset. `wm density 150` applies live; pin hw.lcd.density=150 to keep it.
+    #     Watch for duplicate hw.lcd.* keys -- appending to config.ini does not replace
+    #     the device profile's lines, and the last one wins.
+
     # 5. run it
     emulator -avd atak34 -port 5574 -gpu host
 
