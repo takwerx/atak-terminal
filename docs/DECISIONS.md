@@ -27,13 +27,23 @@ true. The second half is where it dies.
   outright, and `-gpu host -feature ForceANGLE` still comes up
   `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device))`. There is no ANGLE-on-Metal mode:
   `-help-gpu` lists only `auto`, `host`, `swiftshader`, `swangle`.
-- **So the AVD gives the GPU without ATAK, or ATAK without the GPU.** Taking ATAK means
-  SwiftShader, which is what redroid already does -- while also giving up the real LAN
-  address and multicast that the AVD's user-mode NAT cannot provide, and which
-  PROJECT_BRIEF calls the load-bearing assumption. There is nothing to gain by switching.
-- Re-test if either changes: an emulator build that pairs ANGLE with Metal, or an ATAK
-  that accepts a config without stencil. The second is a one-line change in
-  `GLMapSurface` and would be worth raising with the TAK Product Center.
+- **Solved. ATAK ships the switch, and it is a touch file.** `MapView.initGLSurface`:
+
+      if (IOProviderFactory.exists(FileSystemUtils.getItem("opengl.broken")))
+          System.setProperty("USE_GENERIC_EGL_CONFIG", "true");
+
+  and `GLMapSurface` then asks for `setEGLConfigChooser(8, 8, 8, 8, 16, 0)` -- **stencil
+  zero** -- which the Metal translator does provide. So:
+
+      adb shell touch /sdcard/atak/opengl.broken
+
+  **Verified 2026-09-22:** with that file present and `-gpu host`, ATAK 5.8.0.3 runs on
+  `Apple M2 Max / 4.1 Metal` with zero `No config chosen` crashes -- full UI, toolbar,
+  globe rendering, GPS fix. The comment beside the fallback path reads "Required for EGL
+  compatibility with the emulator", so TAK anticipated exactly this. No code change, no
+  rebuild, nothing to ask the TAK Product Center for.
+- The name is misleading and cost an hour: nothing is broken about the GPU. The file only
+  selects a less demanding EGL config. Do not read `opengl.broken` as a diagnosis.
 - Incidental: the `google_apis` images ship Chrome, and the emulator's own `-gpu` default
   on a stock AVD is `swiftshader_indirect` -- the existing `atak58` AVD on this machine
   had been measured on software rendering without anyone noticing.
