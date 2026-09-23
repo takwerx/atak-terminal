@@ -2,6 +2,44 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-22, night: the recipe. ATAK on the Apple GPU, measured at 2x redroid
+
+Working end to end, operator's words "working very well". The full recipe, because every
+one of these five lines was a separate hour:
+
+    # 1. an arm64 AVD -- android-34 google_apis (35 also works)
+    avdmanager create avd -n atak34 -k "system-images;android-34;google_apis;arm64-v8a"
+
+    # 2. config.ini -- all three matter
+    hw.gpu.mode=host     # NOT swiftshader_indirect, which is the default and is software
+    hw.keyboard=yes      # default 'no' silently ignores the physical keyboard
+    hw.mainKeys=no       # 'yes' means "device has hardware Back/Home", so no nav bar is drawn
+
+    # 3. the one that unlocks it
+    adb shell touch /sdcard/atak/opengl.broken
+
+    # 4. Android's own suppression of the on-screen keyboard
+    adb shell settings put secure show_ime_with_hard_keyboard 0
+
+    # 5. run it
+    emulator -avd atak34 -port 5574 -gpu host
+
+- **Measured: 45.8 fps** on an empty map against redroid's 22-25 at best, and 2.9 with
+  feature labels. `GLES: Google (Apple), Android Emulator OpenGL ES Translator
+  (Apple M2 Max), OpenGL ES 3.0 (4.1 Metal - 90.5)`.
+- **Dev ATAK plus debug plugins load normally.** `atak.apk` from the SDK, then the debug
+  APKs, then `shouldLoad-<pkg>=true` in ATAK's prefs. TAKwerx Market and Feature Layer
+  both LOADED on the first try.
+- **What the AVD gives for free that redroid needed work for:** a real hardware keyboard,
+  a working nav bar with Back (ATAK's own faux nav bar is broken on Android 14 and
+  irrelevant here), and pointer input straight from the host.
+- **What it gives up:** the scrcpy bindings (`Shift+right-click` for Back and friends) are
+  gone with scrcpy, and the emulator is behind user-mode NAT -- no LAN address, no
+  multicast. TAK Server over TLS is unaffected. So this is a **second mode**, not a
+  replacement: AVD when the map matters, redroid when LAN presence does.
+- Open: whether Cursorwerx is still needed here. Much of what it fixes was 3 fps rather
+  than gesture logic, and the AVD may not need it. Test before installing.
+
 ## 2026-09-22, night: the native Android Emulator has the GPU, and ATAK will not run on it
 
 A proposal arrived to drop redroid and run Google's Android Emulator natively on macOS,
