@@ -2,6 +2,35 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-26, evening: the speed cost was the emulator's KosmicKrisp. Mesa 26.2.3's runs at 41 fps
+
+The entry below measured the label fix at 11 fps in a busy view. The cause was the
+KosmicKrisp build the emulator bundles (`Apple-26.1.99`, a Mesa 26.1 development
+snapshot): each frame took 116-132 ms from queueBuffer to its GPU fence. Homebrew's
+`mesa` 26.2.3 ships KosmicKrisp too, and with it the same view runs at **41 fps**, queued
+-> GPU done 8 ms. Same flags, same ATAK, same view:
+
+| KosmicKrisp | busy DOME view | empty globe | frame latency |
+|---|---|---|---|
+| emulator's bundled 26.1.99 | 11 fps | 24 | 120 ms |
+| Homebrew mesa 26.2.3 | **41 fps** | ~50 | 8 ms |
+| (`-gpu host`, squashed labels) | 43 fps | 46 | -- |
+| (redroid, same view, measured today) | ~2 fps | -- | -- |
+
+- **How it is wired, for now:** the emulator ignores `library_path` in
+  `lib64/vulkan/libkosmickrisp_icd.json` and loads `lib64/vulkan/libvulkan_kosmickrisp.dylib`
+  by name. So that file is moved aside to `.takwerx-orig` and replaced by a symlink to
+  `/opt/homebrew/opt/mesa/lib/libvulkan_kosmickrisp.dylib` (`brew install mesa`). Verified
+  with `lsof` on the qemu process and the guest's GLES string (`Apple-26.2.3`).
+- **That is a hand edit inside a Homebrew-managed SDK**, undone by any emulator update.
+  It belongs in takwerx: its GPU-emulator launcher should own a private copy or re-link
+  on every start, and check the driver version it got.
+- **redroid is not the fallback it was assumed to be.** In this busy view it is ~2 fps
+  (SwiftShader), 2.4 with the PBO-cull option; the "~22 fps" figure was from a light map.
+- **Stopping the emulator for a restart truncates Feature Layer's `layers.json`** even
+  after `adb shell sync`: the stop makes ATAK save, and the power cut lands mid-write.
+  `am force-stop com.atakmap.app.civ` first avoids it. The fix is Feature Layer's.
+
 ## 2026-09-26, later: labels fixed on the GPU, via guest ANGLE on KosmicKrisp -- at a speed cost
 
 The 64 px cap below is gone, for every plugin at once, with no plugin changed. Operator,
