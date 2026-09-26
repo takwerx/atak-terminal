@@ -23,6 +23,7 @@ case "$HOST_OS" in
 esac
 . "$TAKWERX_APP/lib/vm.sh"
 . "$TAKWERX_APP/lib/android.sh"
+. "$TAKWERX_APP/lib/emulator.sh"
 
 usage() {
   cat <<USAGE
@@ -38,10 +39,11 @@ takwerx $TAKWERX_VERSION: ATAK on your desktop
   takwerx plugin FILE         install a plugin APK
   takwerx market              install the TAKWERX Market plugin matching your ATAK
   takwerx datapackage FILE    import a data package zip
-  takwerx display PRESET      ultra | tablet | desktop | phone | WIDTHxHEIGHT@DPI, live
+  takwerx display PRESET      screen (emulator: fit this Mac's screen) | ultra | tablet | desktop | phone | WIDTHxHEIGHT@DPI
   takwerx location WHERE      LAT,LON [ACCURACY_M] | here (this Mac's location) | ip (rough) | off
   takwerx keyboard MODE       auto | uhid (hardware keyboard, at the Mac) | sdk (typed text, works over remote desktop)
   takwerx network MODE        nat | bridged (bridged gives Android its own LAN address)
+  takwerx runtime [RUNTIME]   redroid (Android in the VM) | emulator (Android Emulator on the Mac's GPU)
 
   takwerx shell               adb shell into Android
   takwerx vm-shell            shell into the Linux VM
@@ -55,12 +57,14 @@ USAGE
 }
 
 require_installed() {
+  [ "$(runtime)" = emulator ] && return 0
   [ -x "$LIMACTL" ] || die "Not installed yet. Run: takwerx init"
   vm_exists || die "No VM yet. Run: takwerx init"
 }
 
 # Bring Android up without opening the window; used by up, apk, plugin, market.
 android_up() {
+  if [ "$(runtime)" = emulator ]; then emu_up; return 0; fi
   require_installed
   vm_start
   container_start
@@ -144,18 +148,25 @@ cmd_up() {
   local window=1
   [ "${1:-}" = --no-window ] && window=0
   if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then notify "Starting ATAK"; fi
+  rm -f "$TAKWERX_STATE/stopping"
   android_up
   location_refresh
   if atak_installed; then
-    atak_running || atak_launch
+    if ! atak_running; then
+      atak_launch
+      if [ "$(runtime)" = emulator ]; then emu_focus_fix; fi
+    fi
   else
     warn "ATAK is not installed yet: takwerx apk /path/to/ATAK.apk"
     if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then alert "ATAK is not installed yet. Download it from tak.gov and run: takwerx apk <file>"; fi
   fi
-  if [ "$window" = 1 ]; then window_open; fi
+  if [ "$window" = 1 ]; then
+    if [ "$(runtime)" = emulator ]; then emu_front; else window_open; fi
+  fi
 }
 
 cmd_restart() {
+  if [ "$(runtime)" = emulator ]; then emu_stop; cmd_up "$@"; return; fi
   require_installed
   vm_start
   container_stop
@@ -164,7 +175,11 @@ cmd_restart() {
 }
 
 cmd_down() {
+  if [ "$(runtime)" = emulator ]; then emu_stop; ok "Stopped. Data is kept; takwerx up brings it back"; return 0; fi
   require_installed
+  # Tells an open ATAK window that Android is going away on purpose, so it does not
+  # reconnect and start it again halfway through the stop (it did, 2026-09-26).
+  touch "$TAKWERX_STATE/stopping"
   if vm_running; then container_stop; fi
   vm_stop
   ok "Stopped. Data is kept; takwerx up brings it back"
@@ -183,7 +198,16 @@ cmd_apk() {
 cmd_plugin()      { [ -n "${1:-}" ] || die "Usage: takwerx plugin FILE.apk"; android_up; plugin_install "$1"; }
 cmd_market()      { android_up; market_install; }
 cmd_datapackage() { [ -n "${1:-}" ] || die "Usage: takwerx datapackage FILE.zip"; android_up; datapackage_install "$1"; }
-cmd_display()     { [ -n "${1:-}" ] || die "Usage: takwerx display ultra|tablet|desktop|phone|WxH@DPI"; android_up; display_apply "$1"; }
+cmd_display() {
+  [ -n "${1:-}" ] || die "Usage: takwerx display screen|ultra|tablet|desktop|phone|WxH@DPI"
+  if [ "$(runtime)" = emulator ]; then
+    [ "$1" = screen ] || display_geometry "$1" >/dev/null || die "Unknown preset '$1'"
+    config_set EMU_DISPLAY "$1"
+    ok "Display $1 ($(emu_geometry | awk '{print $1"x"$2" at "$3" dpi"}')); the emulator takes a new screen size at start: takwerx restart"
+    return 0
+  fi
+  android_up; display_apply "$1"
+}
 
 cmd_location() {
   local arg=${1:-status} pos lat lon acc
@@ -245,6 +269,17 @@ cmd_network() {
 
 cmd_status() {
   printf '%stakwerx %s%s\n' "$BOLD" "$TAKWERX_VERSION" "$NC"
+  if [ "$(runtime)" = emulator ]; then
+    printf '  Runtime:  emulator on the GPU (%s), %s\n' "$(tool_version "$EMU_DIR")" "$(emu_running && printf 'running' || printf 'stopped')"
+    if android_online; then
+      printf '  Android:  %s, display %s (%s)\n' "$ADB_ENDPOINT" "$(config_get EMU_DISPLAY screen)" "$(emu_geometry | awk '{print $1"x"$2" at "$3" dpi"}')"
+      if atak_installed; then printf '  ATAK:     %s%s\n' "$(atak_version)" "$(atak_running && printf ', running')"; else printf '  ATAK:     not installed\n'; fi
+    fi
+    if [ -n "$(config_get LOCATION)" ]; then printf '  Position: %s (about %s m, from %s)\n' "$(config_get LOCATION)" "$(config_get LOCATION_ACCURACY)" "$(config_get LOCATION_SOURCE)"; fi
+    printf '  Logs:     %s, %s\n' "$LOG_FILE" "$EMU_LOG"
+    return 0
+  fi
+  printf '  Runtime:  redroid in the VM\n'
   printf '  VM:       %s' "$(vm_status)"
   if vm_exists; then printf ', %s CPUs, %s, network %s' "$(config_get VM_CPUS)" "$(config_get VM_MEMORY)" "$(config_get NETWORK_MODE nat)"; fi
   if vm_running; then printf ', ip %s' "$(vm_ip)"; fi
@@ -313,6 +348,19 @@ cmd_uninstall() {
   ok "Removed. The PATH line in your shell profile is harmless and can be deleted by hand."
 }
 
+cmd_runtime() {
+  case "${1:-}" in
+    "") printf 'Runtime: %s\n' "$(runtime)" ;;
+    redroid|emulator)
+      [ "$(runtime)" = "$1" ] && { ok "Runtime is already $1"; return 0; }
+      say "Stopping the current runtime first"
+      cmd_down
+      config_set RUNTIME "$1"
+      ok "Runtime: $1. 'takwerx up' starts it" ;;
+    *) die "Usage: takwerx runtime redroid|emulator" ;;
+  esac
+}
+
 cmd_logs() {
   case "${1:-}" in
     --android)   android_online || die "Android is not running"; adb_ logcat -d -t 500 ;;
@@ -347,6 +395,7 @@ main() {
     location)    cmd_location "$@" ;;
     keyboard)    cmd_keyboard "$@" ;;
     network)     cmd_network "$@" ;;
+    runtime)     cmd_runtime "$@" ;;
     shell)       require_installed; exec "$ADB" -s "$ADB_ENDPOINT" shell "$@" ;;
     vm-shell)    require_installed; vm_shell ;;
     screenshot)  cmd_screenshot "$@" ;;

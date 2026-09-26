@@ -2,6 +2,66 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-26, night: the GPU emulator is a takwerx runtime. Every setting below was measured
+
+`takwerx runtime emulator`, then `takwerx up|down|restart` and the ATAK icon work as before;
+`lib/emulator.sh`. The operator's verdict at the machine, on the final build: "fucking
+nailed it". What it does and why, each one a separate hour:
+
+- **A private copy of the SDK's emulator** in `~/.takwerx/tools/emulator` (APFS clone),
+  with Homebrew's Vulkan drivers dropped over the bundled ones, because the emulator loads
+  `lib64/vulkan/<driver>.dylib` by file name and ignores the ICD json. Rebuilt when the
+  emulator, molten-vk or mesa version changes (`.version`).
+- **MoltenVK 1.4.2 by default, not KosmicKrisp.** KosmicKrisp 26.2.3 is faster (41-53 fps
+  busy view) but lost its GPU fences under a few minutes of heavy zooming, every time:
+  gfxstream logs `pending waitables ... taking more than 1000 milliseconds` then aborts on
+  `vkQueueWaitIdle ... VK_TIMEOUT`. Reproduced without the operator (wheel bursts over gRPC,
+  `-grpc 8554`), in 3-10 minutes, across every feature-flag combination tried
+  (`-VulkanVirtualQueue`, `ANDROID_EMU_VK_DISABLE_DEFERRED_COMMANDS`,
+  `-VulkanNativeSwapchain`). MoltenVK 1.4.2 (Homebrew) ran the same stress 10 minutes clean
+  at 25-44 fps. The bundled MoltenVK 1.4.0 cannot build ANGLE's pipelines at all.
+- **One ANGLE feature must be off for ATAK to start on MoltenVK:** its pipeline warm-up at
+  link builds placeholder pipelines with float attributes for ATAK's integer ones, Metal
+  refuses (`uint2 cannot be read using MTLAttributeFormatFloat4`), the link fails and ATAK
+  aborts in `AntiAliasedLinesShader`. `setprop debug.angle.feature_overrides_disabled
+  warmUpPipelineCacheAtLink` from a root shell after boot, before ATAK starts. The boot
+  property the emulator offers for this (`-feature`/`androidboot.hardware.angle_*`) does not
+  reach ANGLE; `-prop` does not either. So the image must allow `adb root` (google_apis).
+- **`-feature VirtioTablet` makes the Mac pointer a real mouse in Android**: hover, the
+  wheel as ACTION_SCROLL, buttons. Without it every mouse action is a synthetic finger and
+  the wheel pans. Android classes the tablet as MOUSE|STYLUS, tool type STYLUS, and three
+  things follow, each fixed where it can be:
+  - a press from it never focuses a text field (Cursorwerx re-issues every tablet press as
+    touchscreen-sourced, see its `ClickRepair`; measured, not reasoned);
+  - Android 14 offers stylus handwriting over every text field, a floating icon under the
+    cursor (`settings put secure stylus_handwriting_enabled 0`, in provisioning);
+  - Android draws its own cursor under the Mac's, plus a hand over ATAK's toolbar buttons
+    (Cursorwerx hides it: window icon none, and a transparent shroud over the content).
+- **ATAK's main window has no text input after a fresh start** until it is sent home and
+  back once: the hand-over from its "ATAK Loading" window drops the focus report ("Unknown
+  focus tokens, dropping reportFocusChanged"). `takwerx up` does that bounce after launch.
+- **Android's screen is sized to the main display's usable area** less the title bar and
+  side toolbar (3360x1380 here), 200 dpi over a physical 150: a maximized window is 1:1 and
+  a smaller one scales down, since the emulator cannot follow a free resize (presets only).
+  At the old 2560x1440 a window dragged to 1656x932 showed ATAK at 65%.
+- **The window title** is one format string in the qemu binary, `%s Emulator - %s:%d`,
+  overwritten in the copy with the same 19 characters, `TAKwerx ATAK Viewer` (the operator
+  wanted `TAKWERK - ATAK - VIEWER`, too long by four), then re-signed ad hoc with the
+  entitlements it had. The copy is never Google's signed binary again; macOS may ask once.
+- **A clean stop is ATAK's QUITAPP, `sync`, then `reboot -p`**; the emulator exits by
+  itself in ~4 s. `adb emu kill` is a pulled plug and cost Feature Layer its layer list.
+- **The splash is ATAK's own supported one:** `atak/support/atak_splash.png` (under
+  4096 px a side, full-screen centre-crop), pushed by provisioning from
+  `assets/atak_splash.png` when its md5 differs. Nothing in ATAK is modified. The SDK docs
+  say nothing about the size; ATAK's own art is 1280x720.
+- **The position** is `adb emu geo fix` from the Mac's location at every start. A moving
+  host (a vehicle) needs the GPS's NMEA forwarded live (`emu geo nmea`, at the module's
+  rate, 1-10 Hz); not built, and Windows, where such a host would be, is not built either.
+- **scrcpy can mirror the emulator** (40 fps in the busy view, 20-28 fps encode) but is not
+  needed: the emulator's own window is the product now, with the Mac keyboard and mouse.
+- **Not done:** takwerx does not install the SDK, the system image or the AVD yet (the
+  operator's `atak34` is used); the Feature Layer save fix is parked in its repo's stash.
+
 ## 2026-09-26, evening: the speed cost was the emulator's KosmicKrisp. Mesa 26.2.3's runs at 41 fps
 
 The entry below measured the label fix at 11 fps in a busy view. The cause was the

@@ -260,6 +260,7 @@ android_provision() {
   adb_sh settings put secure show_ime_with_hard_keyboard 0 >/dev/null 2>&1 || true
   tz=$(host_timezone)
   if [ -n "$tz" ]; then adb_sh setprop persist.sys.timezone "$tz" >/dev/null 2>&1 || true; fi
+  atak_splash_apply
   # Gesture navigation: the tablet taskbar then auto-hides and ATAK gets the whole screen.
   # Only switched once, because the switch restarts the launcher.
   if ! adb_sh cmd overlay list 2>/dev/null | grep -q '\[x\] com.android.internal.systemui.navbar.gestural$'; then
@@ -267,6 +268,18 @@ android_provision() {
     adb_sh cmd overlay disable com.android.internal.systemui.navbar.threebutton >/dev/null 2>&1 || true
     sleep 3
   fi
+}
+
+# ATAK shows atak/support/atak_splash.png (under 4096 px a side) in place of its own splash
+# image: its own supported customisation, read at every start; nothing in ATAK is modified.
+atak_splash_apply() {
+  local src="$TAKWERX_APP/assets/atak_splash.png" want have
+  [ -f "$src" ] || return 0
+  want=$(md5 -q "$src" 2>/dev/null || md5sum "$src" | cut -d' ' -f1)
+  have=$(adb_sh md5sum /sdcard/atak/support/atak_splash.png 2>/dev/null | cut -d' ' -f1)
+  [ "$want" = "$have" ] && return 0
+  adb_sh mkdir -p /sdcard/atak/support >/dev/null 2>&1 || true
+  adb_ push "$src" /sdcard/atak/support/atak_splash.png >/dev/null 2>&1 || warn "Could not install the splash screen"
 }
 
 atak_installed() { adb_sh pm path "$ATAK_PACKAGE" 2>/dev/null | grep -q '^package:'; }
@@ -357,6 +370,8 @@ window_open() {
         --no-audio --max-fps="$(config_get MAX_FPS 60)" --video-bit-rate=8M "$@" && rc=0 || rc=$?
     if [ "$rc" != 2 ] || [ "$attempt" = 2 ]; then return "$rc"; fi
     # A deliberate `takwerx down` stops the VM; do not fight it. Anything else, bring it back.
+    # The VM is still running for a while during a stop, hence the marker as well.
+    [ -f "$TAKWERX_STATE/stopping" ] && return "$rc"
     vm_running || return "$rc"
     warn "The window lost its connection to Android; reconnecting"
     android_up || return "$rc"
@@ -371,8 +386,12 @@ window_open() {
 LOCATION_FILE=/etc/takwerx/location
 location_set() {
   local lat=$1 lon=$2 acc=$3 source=$4
-  vm_run "mkdir -p /etc/takwerx && printf '%s %s %s\n' '$lat' '$lon' '$acc' >$LOCATION_FILE" || die "Could not store the position in the VM"
   config_set LOCATION "$lat,$lon"; config_set LOCATION_ACCURACY "$acc"; config_set LOCATION_SOURCE "$source"
+  if [ "$(runtime)" = emulator ]; then
+    if android_online; then emu_location_apply; fi
+  else
+    vm_run "mkdir -p /etc/takwerx && printf '%s %s %s\n' '$lat' '$lon' '$acc' >$LOCATION_FILE" || die "Could not store the position in the VM"
+  fi
   ok "Position $lat, $lon (about $acc m, from $source). ATAK shows it as a GPS fix within a few seconds"
 }
 # The Mac's own Wi-Fi position, refreshed on every launch, because a laptop moves and a
