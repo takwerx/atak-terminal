@@ -2,6 +2,38 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-26: why labels are tiny on the GPU emulator -- a 64 px cap, measured
+
+The AVD recipe below is fast but labelled markers render at about 0.6x and feature labels
+become specks. Settings are not the cause; the migration of redroid's prefs proved that.
+
+- **Apple's OpenGL caps point sprites at 64 px.** Queried on this Mac with a CGL 3.2 core
+  context: `renderer: Apple M2 Max / GL_POINT_SIZE_RANGE: 1..64`. The AVD's `-gpu host`
+  path translates GLES to that driver.
+- **ATAK draws every map icon as a point sprite.** The live 5.8 renderer is native:
+  `renderer/feature/BatchGeometryPoints.vert` sets
+  `gl_PointSize = (pointSize*rotPad) + hitTestRadius` with no query of the maximum and no
+  fallback. Plain icons (~26 px) fit; Feature Layer's labelled composites (a DART callsign
+  bakes to 178x65) are clamped to 64 and the text inside shrinks with them. ATAK's own text
+  labels are drawn as quads and are unaffected -- "DIV A", "Hazard Tree" read fine.
+  redroid is SwiftShader, which has no such cap. That is the whole difference.
+- **Dead end: `mapengine.glbatchgeometryrenderer.force-points-render-batch=1`** in
+  `/sdcard/atak/devopts.properties` (ATAK copies `mapengine.*` keys into ConfigOptions).
+  No effect: it is read by the Java `GLBatchPoint` path, deprecated since 5.3.
+- **Dead end, for now: `-feature Vulkan,GuestAngle`.** Gives `ANGLE (Apple, Vulkan 1.3.0
+  (Apple M2 Max)), OpenGL ES 3.1` -- real GPU through MoltenVK, where Metal's limit is 511 --
+  but ANGLE fails to build some Vulkan pipelines (`vk_cache_utils.cpp createPipeline:
+  Internal Vulkan error (-3)`, seen from skia too) and ATAK aborts at
+  `GLBatchGeometryShaders.cpp:228 AntiAliasedLinesShader ... code == TE_Ok`. Re-test when
+  the emulator moves past 37.1.11.
+- **Also found: physical DPI.** ATAK's engine DPI is
+  `min(sqrt(xdpi*ydpi), densityDpi)` (`AtakMapView`). redroid was booted at 150 and
+  overridden to 200, so its map ran at 150. The AVD now matches: `hw.lcd.density=150`,
+  then `adb shell wm density 200` after boot. Basemap text grew; the 64 px cap is separate.
+- **The fix belongs in Feature Layer:** do not bake a label into an icon larger than the
+  GPU's point-sprite limit; draw it as ATAK text there. Handoff in the notes repo,
+  `HANDOFF-2026-09-26-featurelayer-gpu-labels.md`.
+
 ## 2026-09-22, night: the recipe. ATAK on the Apple GPU, measured at 2x redroid
 
 Working end to end, operator's words "working very well". The full recipe, because every
