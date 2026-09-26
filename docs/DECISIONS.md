@@ -4,7 +4,7 @@ Dated notes on what was decided and why, so nobody re-derives them. Newest first
 
 ## 2026-09-26, night: the GPU emulator is a takwerx runtime. Every setting below was measured
 
-`takwerx runtime emulator`, then `takwerx up|down|restart` and the ATAK icon work as before;
+The product is **TAKwerx ATAK Terminal**. `takwerx runtime emulator`, then `takwerx up|down|restart` and the ATAK icon work as before;
 `lib/emulator.sh`. The operator's verdict at the machine, on the final build: "fucking
 nailed it". What it does and why, each one a separate hour:
 
@@ -45,9 +45,11 @@ nailed it". What it does and why, each one a separate hour:
   a smaller one scales down, since the emulator cannot follow a free resize (presets only).
   At the old 2560x1440 a window dragged to 1656x932 showed ATAK at 65%.
 - **The window title** is one format string in the qemu binary, `%s Emulator - %s:%d`,
-  overwritten in the copy with the same 19 characters, `TAKwerx ATAK Viewer` (the operator
-  wanted `TAKWERK - ATAK - VIEWER`, too long by four), then re-signed ad hoc with the
-  entitlements it had. The copy is never Google's signed binary again; macOS may ask once.
+  overwritten in the copy with `TAKwerx ATAK Terminal`. That is two characters longer than
+  the slot, so it runs into the next string, `%s: %dx%d\n`, a debug-only log format that
+  becomes `l`; printf ignores arguments a format does not use. The binary is then re-signed
+  ad hoc with the entitlements it had: never Google's signed binary again, and macOS may
+  ask once. The name went Viewer -> Terminal the same evening.
 - **A clean stop is ATAK's QUITAPP, `sync`, then `reboot -p`**; the emulator exits by
   itself in ~4 s. `adb emu kill` is a pulled plug and cost Feature Layer its layer list.
 - **The splash is ATAK's own supported one:** `atak/support/atak_splash.png` (under

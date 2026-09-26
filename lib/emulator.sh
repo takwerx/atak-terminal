@@ -52,7 +52,7 @@ emu_prepare() {
   mv=$(brew_version molten-vk); kv=$(brew_version mesa)
   rev=$(sed -n 's/^Pkg.Revision=//p' "$sdk/emulator/source.properties")
   # The trailing tag is this function's own revision: bump it when the copy is built differently.
-  want="emulator $rev, molten-vk ${mv:-none}, mesa ${kv:-none}, r5"
+  want="emulator $rev, molten-vk ${mv:-none}, mesa ${kv:-none}, r6"
   if [ "$(tool_version "$EMU_DIR")" != "$want" ]; then
     step "Preparing the GPU emulator ($want)"
     rm -rf "$EMU_DIR"
@@ -65,8 +65,9 @@ emu_prepare() {
 }
 
 # The window is titled from one format string, "%s Emulator - %s:%d" (product, AVD, port).
-# It becomes "TAKwerx ATAK Viewer" in this copy, the same 19 characters; printf ignores the
-# unused arguments. The edit breaks Google's signature, so the copy is signed again locally with
+# It becomes "TAKwerx ATAK Terminal" in this copy: two characters longer than the slot, so
+# it runs into the string that follows, "%s: %dx%d\n", a debug-only log format, which
+# becomes "l". printf ignores the arguments neither string uses any more. The edit breaks Google's signature, so the copy is signed again locally with
 # the entitlements it had (the hypervisor, and library validation off, which is also what
 # lets it load Homebrew's drivers). macOS then sees a new app and may ask once for
 # Local Network access. A failed patch leaves the stock title, nothing worse.
@@ -74,7 +75,7 @@ emu_retitle() {
   local bin="$EMU_DIR/qemu/darwin-aarch64/qemu-system-aarch64" ent="$TAKWERX_STATE/emulator.entitlements"
   codesign -d --entitlements :- "$bin" >"$ent" 2>/dev/null && [ -s "$ent" ] || { warn "Could not read the emulator's entitlements; keeping its title"; return 0; }
   cp -p "$bin" "$bin.orig"
-  perl -0777 -pi -e 's/%s Emulator - %s:%d\x00/TAKwerx ATAK Viewer\x00/' "$bin"
+  perl -0777 -pi -e 's/%s Emulator - %s:%d\x00%s: %dx%d\n\x00/TAKwerx ATAK Terminal\x00: %dx%d\n\x00/' "$bin"
   if cmp -s "$bin" "$bin.orig" || ! codesign --force --sign - --options runtime --entitlements "$ent" "$bin" >/dev/null 2>&1; then
     warn "Could not retitle the emulator window; keeping its title"
     mv -f "$bin.orig" "$bin"; return 0
