@@ -30,8 +30,11 @@ become specks. Settings are not the cause; the migration of redroid's prefs prov
   `min(sqrt(xdpi*ydpi), densityDpi)` (`AtakMapView`). redroid was booted at 150 and
   overridden to 200, so its map ran at 150. The AVD now matches: `hw.lcd.density=150`,
   then `adb shell wm density 200` after boot. Basemap text grew; the 64 px cap is separate.
-- **The fix belongs in Feature Layer:** do not bake a label into an icon larger than the
-  GPU's point-sprite limit; draw it as ATAK text there. Handoff in the notes repo,
+- **The fix belongs in the runtime, not in plugins.** Baking labels into icons is how
+  every TAKWERX plugin labels (Atmosphere's station pills are two lines in several colors,
+  which an ATAK text label cannot draw at all), and phones and redroid have no cap. Next
+  lead: the emulator's bundled ANGLE has a Metal backend and reads
+  `ANGLE_DEFAULT_PLATFORM`; Metal's point limit is 511. Handoff in the notes repo,
   `HANDOFF-2026-09-26-featurelayer-gpu-labels.md`.
 
 ## 2026-09-22, night: the recipe. ATAK on the Apple GPU, measured at 2x redroid
