@@ -2,6 +2,38 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-26, later: fixed. Guest ANGLE on KosmicKrisp, full-size labels on the GPU
+
+The 64 px cap below is gone, for every plugin at once, with no plugin changed. Operator,
+at the machine, with Feature Layer's labels up: "fuck yeah you did it". Step 5 of the
+recipe (next entry down) becomes:
+
+    ANDROID_EMU_VK_SELECT_ICD=kosmickrisp \
+      emulator -avd atak34 -port 5574 -gpu host -feature Vulkan,GuestAngle -no-snapshot
+
+    GLES: Google Inc. (Apple), ANGLE (Apple, Vulkan 1.3.0 (Apple M2 Max (0x00000064)),
+          Apple-26.1.99), OpenGL ES 3.1.0 (ANGLE 2.1.24303 git hash: 54447ed6f702)
+
+- **What it is.** Android's GLES is ANGLE inside the guest; its Vulkan crosses to the
+  host through gfxstream; the host runs that Vulkan on **KosmicKrisp**, Mesa's
+  Vulkan-on-Metal driver, which emulator 37.1.11 ships in `lib64/vulkan/` beside
+  MoltenVK. No Apple OpenGL anywhere in the path, so no 64 px point sprites.
+- **Why the same flags failed before:** the default Vulkan driver is MoltenVK, and on it
+  ANGLE fails to build pipelines (`createPipeline: Internal Vulkan error (-3)`) and ATAK
+  aborts in `AntiAliasedLinesShader`. On KosmicKrisp: no Vulkan errors, ATAK up.
+- **The env var only works in host mode.** The emulator logs
+  `Setting ICD from envvar ANDROID_EMU_VK_SELECT_ICD, to 'kosmickrisp'`. Accepted values,
+  from the binary: `swiftshader`, `lavapipe`, `moltenvk`, `kosmickrisp`; anything else
+  falls back to MoltenVK. It must be in the emulator's own environment, so it goes in
+  the script Terminal.app runs.
+- **Dead ends tried the same day:** `-feature ForceANGLE` makes the emulator pick
+  `vulkan_mode_selected:swiftshader gles_mode_selected:swangle` and ignores both
+  `ANGLE_DEFAULT_PLATFORM=metal` and the ICD variable: always software.
+- **Costs:** boot to `sys.boot_completed` 48 s against 26 s. Frame rate while panning
+  not yet benchmarked against the 45.8 of `-gpu host`; the operator reports it fast.
+- **Not re-tested:** whether `/sdcard/atak/opengl.broken` is still needed. It was for
+  the Metal translator's missing stencil config; ANGLE publishes one. Left in place.
+
 ## 2026-09-26: why labels are tiny on the GPU emulator -- a 64 px cap, measured
 
 The AVD recipe below is fast but labelled markers render at about 0.6x and feature labels
