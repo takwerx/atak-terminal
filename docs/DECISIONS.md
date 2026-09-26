@@ -2,7 +2,7 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
-## 2026-09-26, later: fixed. Guest ANGLE on KosmicKrisp, full-size labels on the GPU
+## 2026-09-26, later: labels fixed on the GPU, via guest ANGLE on KosmicKrisp -- at a speed cost
 
 The 64 px cap below is gone, for every plugin at once, with no plugin changed. Operator,
 at the machine, with Feature Layer's labels up: "fuck yeah you did it". Step 5 of the
@@ -29,10 +29,45 @@ recipe (next entry down) becomes:
 - **Dead ends tried the same day:** `-feature ForceANGLE` makes the emulator pick
   `vulkan_mode_selected:swiftshader gles_mode_selected:swangle` and ignores both
   `ANGLE_DEFAULT_PLATFORM=metal` and the ICD variable: always software.
-- **Costs:** boot to `sys.boot_completed` 48 s against 26 s. Frame rate while panning
-  not yet benchmarked against the 45.8 of `-gpu host`; the operator reports it fast.
+- **Cost: speed, measured.** Same view (Feature Layer "Go to" on a 1,027-feature NIFS
+  layer, 20 km scale), same pan benchmark, emulator restarted between runs:
+
+  | Setup | Labels | DOME view | Empty globe |
+  |---|---|---|---|
+  | `-gpu host` (Apple GL) | squashed to 64 px | **43 fps** | 46 |
+  | guest ANGLE on KosmicKrisp | full size | **11 fps** | 24 |
+  | redroid (SwiftShader), earlier | full size | ~22 fps | -- |
+
+  So the fix is slower than redroid in a busy view. Boot is also slower, 20-76 s.
+- **Where the time goes.** Not the Mac: gfxstream's render threads sit waiting for the
+  guest, KosmicKrisp's own work is a few percent. Not pixels: 1920x1080 instead of
+  2560x1440 gains 10%. From queueBuffer to the GPU fence signalling takes 116-132 ms a
+  frame, i.e. per-draw-call cost through guest ANGLE -> gfxstream Vulkan -> KosmicKrisp.
+  ATAK is draw-call heavy.
+- **One real gain: `mapengine.glmapview.use-pbo-cull=0`** in
+  `/sdcard/atak/devopts.properties`. ATAK culls terrain tiles on the GPU and maps a PBO
+  to read the result back every frame; under ANGLE that `glMapBufferRange` is a full
+  `vkWaitForFences` round trip (seen in `debuggerd -b` stacks,
+  `GLGlobe::cullTerrainTiles_pbo`). The option selects `cullTerrainTiles_cpu`, which
+  ATAK's own Apple build always uses (`#ifndef __APPLE__` in `GLGlobe.cpp`). Globe 16 ->
+  21-24 fps; the busy view barely moves.
+- **Tried, no gain:** `-VulkanNativeSwapchain`; `VulkanBatchedDescriptorSetUpdate` +
+  `VirtioGpuNativeSync` (+1-2 fps).
+- **Tried, dead:** host-side ANGLE on a real GPU. `ForceANGLE` loads ANGLE's bundled
+  SwiftShader through `lib64/gles_angle/vk_swiftshader_icd.json`; pointing that file at
+  KosmicKrisp works (`ANGLE (Apple, Vulkan 1.3.348 (Apple M2 Max), KosmicKrisp)`) but is
+  no faster (DOME 9 fps, globe 12). Pointing it at MoltenVK crashes the emulator at
+  start, with or without the portability flag. Stock file restored.
+- **ATAK draws feature icons only as point sprites** (`batchDrawPoints` in
+  `GLBatchGeometryRenderer4.cpp`, `GL_PROGRAM_POINT_SIZE`, no quad path or option), so
+  on `-gpu host` the 64 px cap cannot be configured away.
 - **Not re-tested:** whether `/sdcard/atak/opengl.broken` is still needed. It was for
   the Metal translator's missing stencil config; ANGLE publishes one. Left in place.
+- **Hard-killing the emulator (`adb emu kill`) is a power pull.** Feature Layer's
+  `layers.json` was left 0 bytes mid-write and it started with no layers, logging
+  "state restore failed" without trying `layers.json.bak` (which was intact). `adb shell
+  sync` before a kill. The non-atomic write is a Feature Layer bug, same family as the
+  0-byte icon PNGs.
 
 ## 2026-09-26: why labels are tiny on the GPU emulator -- a 64 px cap, measured
 
