@@ -175,10 +175,14 @@ emu_provision() {
   # The pointer is a tablet that Android also takes for a stylus; without this Android 14
   # offers stylus handwriting over every text field (a floating icon under the cursor).
   adb_sh settings put secure stylus_handwriting_enabled 0 >/dev/null 2>&1 || true
+  # Android in dark mode. Since Android 12 a toast's text colour comes from the app's
+  # theme (ATAK's is dark: white text) and its pill from the system's (light by default:
+  # a white pill). White on white, unreadable. ATAK itself looks the same either way.
+  adb_sh cmd uimode night yes >/dev/null 2>&1 || true
   tz=$(host_timezone)
   if [ -n "$tz" ]; then adb_sh setprop persist.sys.timezone "$tz" >/dev/null 2>&1 || true; fi
-  atak_splash_apply
   read -r w h dpi <<<"$(emu_geometry)"
+  atak_splash_apply "$w" "$h"
   adb_sh wm size reset >/dev/null 2>&1 || true
   adb_sh wm density "$dpi" >/dev/null 2>&1 || true
   # ATAK on this path. opengl.broken makes ATAK take a generic EGL config (the Metal

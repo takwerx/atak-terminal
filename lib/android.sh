@@ -248,7 +248,7 @@ uhid_usable() { adb_sh test -w /dev/uhid 2>/dev/null; }
 
 # Idempotent Android settings for a desktop instance: never sleep, no lock screen, host timezone.
 android_provision() {
-  local tz
+  local tz w h dpi
   uhid_enable
   adb_firewall
   adb_sh settings put system screen_off_timeout 2147483647 >/dev/null 2>&1 || true
@@ -260,7 +260,8 @@ android_provision() {
   adb_sh settings put secure show_ime_with_hard_keyboard 0 >/dev/null 2>&1 || true
   tz=$(host_timezone)
   if [ -n "$tz" ]; then adb_sh setprop persist.sys.timezone "$tz" >/dev/null 2>&1 || true; fi
-  atak_splash_apply
+  read -r w h dpi <<<"$(display_geometry "$(config_get DISPLAY_PRESET tablet)" || display_geometry tablet)"
+  atak_splash_apply "$w" "$h"
   # Gesture navigation: the tablet taskbar then auto-hides and ATAK gets the whole screen.
   # Only switched once, because the switch restarts the launcher.
   if ! adb_sh cmd overlay list 2>/dev/null | grep -q '\[x\] com.android.internal.systemui.navbar.gestural$'; then
@@ -272,14 +273,33 @@ android_provision() {
 
 # ATAK shows atak/support/atak_splash.png (under 4096 px a side) in place of its own splash
 # image: its own supported customisation, read at every start; nothing in ATAK is modified.
+# ATAK stretches it to cover the screen and crops the rest, so 16:9 art on a 21:9 screen
+# lost a quarter of its height ("cut off or zoomed in", 2026-09-26). The art is therefore
+# fitted whole onto a canvas of the screen's own shape, black at the sides or top, with
+# sips, which every Mac has. atak_splash_apply WIDTH HEIGHT of the Android screen.
 atak_splash_apply() {
-  local src="$TAKWERX_APP/assets/atak_splash.png" want have
+  local w=$1 h=$2 src="$TAKWERX_APP/assets/atak_splash.png" out aw ah want have
   [ -f "$src" ] || return 0
-  want=$(md5 -q "$src" 2>/dev/null || md5sum "$src" | cut -d' ' -f1)
+  [ "$w" -gt 0 ] && [ "$h" -gt 0 ] || return 0
+  out="$TAKWERX_STATE/atak_splash-${w}x${h}.png"
+  if [ ! -f "$out" ] || [ "$src" -nt "$out" ]; then
+    aw=$(sips -g pixelWidth "$src" 2>/dev/null | awk '/pixelWidth/{print $2}')
+    ah=$(sips -g pixelHeight "$src" 2>/dev/null | awk '/pixelHeight/{print $2}')
+    [ -n "$aw" ] && [ -n "$ah" ] || { warn "Could not read the splash image"; return 0; }
+    # Contain: scale by whichever side hits its limit first, then pad the other.
+    if [ $(( aw * h )) -gt $(( w * ah )) ]; then
+      sips -s format png --resampleWidth "$w" "$src" --out "$out.tmp" >/dev/null 2>&1
+    else
+      sips -s format png --resampleHeight "$h" "$src" --out "$out.tmp" >/dev/null 2>&1
+    fi
+    sips -p "$h" "$w" --padColor 000000 "$out.tmp" --out "$out" >/dev/null 2>&1 || { warn "Could not fit the splash to the screen"; rm -f "$out" "$out.tmp"; return 0; }
+    rm -f "$out.tmp"
+  fi
+  want=$(md5 -q "$out" 2>/dev/null || md5sum "$out" | cut -d' ' -f1)
   have=$(adb_sh md5sum /sdcard/atak/support/atak_splash.png 2>/dev/null | cut -d' ' -f1)
   [ "$want" = "$have" ] && return 0
   adb_sh mkdir -p /sdcard/atak/support >/dev/null 2>&1 || true
-  adb_ push "$src" /sdcard/atak/support/atak_splash.png >/dev/null 2>&1 || warn "Could not install the splash screen"
+  adb_ push "$out" /sdcard/atak/support/atak_splash.png >/dev/null 2>&1 || warn "Could not install the splash screen"
 }
 
 atak_installed() { adb_sh pm path "$ATAK_PACKAGE" 2>/dev/null | grep -q '^package:'; }
