@@ -335,6 +335,12 @@ emu_trim_apps() {
 emu_provision() {
   local tz w h dpi
   emu_trim_apps
+  # Chrome on guest ANGLE: its GPU process cannot create the native fence sync objects
+  # the SurfaceControl path needs ("Failed to create android native fence sync object",
+  # then the GPU context is lost), exits, and restarts about every two seconds. Pages
+  # showed black and the screen flashed (2026-09-26). Chrome reads this file on a
+  # debuggable image, which the google_apis image is. ATAK's WebView is unaffected.
+  adb_sh "echo 'chrome --disable-features=AndroidSurfaceControl' > /data/local/tmp/chrome-command-line; chmod 644 /data/local/tmp/chrome-command-line" >/dev/null 2>&1 || true
   # Before ATAK starts, and on every boot (a debug property does not persist). ANGLE builds
   # each program's pipeline at link time with float placeholders for integer attributes of
   # its own; Metal rejects that pipeline ("uint2 cannot be read using ...Float4"), the link

@@ -55,6 +55,19 @@ was measured there over SSH while the operator used it.
   is there for one job, the operator says: TAK Portal's "open in app", which hands the
   server enrolment to ATAK over its `tak:` scheme. Checked after the trim: Chrome is
   still the default browser and ATAK still claims `tak` and `content` links.
+- **Chrome flashed black on the guest-ANGLE emulator: its GPU process in a crash loop.**
+  Opening TAK Portal, Chrome's content area stayed black and flickered. Its GPU process
+  logged `Failed to create android native fence sync object`, `Unable to initialize
+  SkSurface`, then `context is marked as lost` and exited (exit code 0): 47 restarts in
+  100 s on the MacBook, 6 in 20 s on the Studio. The guest ANGLE on gfxstream has no
+  working `EGL_ANDROID_native_fence_sync` for Chrome's SurfaceControl path (the GPU
+  process also logs `Failed to open rendernode`). Fixed by
+  `chrome --disable-features=AndroidSurfaceControl` in
+  `/data/local/tmp/chrome-command-line`, which Chrome honours on this debuggable image:
+  zero crashes, pages render, and the portal's sign-in page came up on the MacBook.
+  Provisioning writes the file on every boot. `--disable-gpu-compositing` and
+  `--disable-gpu` were the fallbacks and were not needed. ATAK's WebView (Esri sign-in)
+  never had the problem: in-process, no SurfaceControl.
 - **A crash-restart of ATAK does not ask "load plugins?" here**: after the display stack
   restart, `am start` brought ATAK back with every plugin loaded and no dialog.
 
