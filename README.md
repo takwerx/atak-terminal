@@ -98,10 +98,18 @@ takwerx uninstall           remove everything
 
 ## Plugins
 
-Plugins install and update from inside ATAK through the TAKWERX Market plugin, which
-`init` installs to match your ATAK version. Any plugin from elsewhere: drag its APK
-onto the window, or `takwerx plugin file.apk`. tak.gov's own plugin loading through
-ATAK works as on a phone.
+Three ways, all inside the window you already have:
+
+- **The TAKWERX Market**, which `init` installs to match your ATAK version. Open it
+  from ATAK's toolbar, pick a plugin, and it installs and updates from there.
+- **Drag the APK onto the window.** Any plugin APK from anywhere: drop it on the
+  ATAK window, Android installs it, and ATAK offers to load it. The same works for
+  any file: a data package, a KML, imagery, all land in Android's Downloads folder
+  for ATAK's Import Manager.
+- **tak.gov in ATAK.** Link your EUD to your tak.gov account in ATAK's plugin
+  manager and install from tak.gov's list, exactly as on a phone.
+
+From Terminal, `takwerx plugin file.apk` does the same as the drag.
 
 ATAK itself cannot be fetched automatically, because tak.gov requires a login.
 Download the new APK, then `takwerx apk` picks up the newest one in Downloads, or
