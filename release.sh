@@ -21,7 +21,7 @@ git merge-base --is-ancestor origin/main HEAD || die "main is behind origin/main
 git tag -l "v$v" | grep -q . && die "tag v$v exists already"
 git ls-remote --exit-code --tags origin "refs/tags/v$v" >/dev/null 2>&1 && die "tag v$v exists on GitHub already"
 grep -qE "^## $v( |$)" CHANGELOG.md || die "CHANGELOG.md has no section '## $v'"
-notes=$(awk -v v="$v" '$0 ~ "^## "v"( |$)" {p=1; next} /^## / {p=0} p {l[++n]=$0} END {while (n && l[n]=="") n--; for (i=1;i<=n;i++) print l[i]}' CHANGELOG.md)
+notes=$(awk -v v="$v" '$0 ~ "^## "v"( |$)" {p=1; next} /^## / {p=0} p && (n || $0 != "") {l[++n]=$0} END {while (n && l[n]=="") n--; for (i=1;i<=n;i++) print l[i]}' CHANGELOG.md)
 [ -n "$notes" ] || die "the CHANGELOG section for $v is empty"
 if [ "$(tr -d '[:space:]' <VERSION)" != "$v" ] || ! git diff --quiet HEAD -- VERSION CHANGELOG.md; then
   printf '%s\n' "$v" >VERSION
