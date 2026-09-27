@@ -434,6 +434,13 @@ emu_plugins_enable() {
   atak_quit
   # No prefs file before ATAK's first run: nothing to switch, ATAK asks on first start.
   adb_sh "sed -i 's|\"shouldLoad-\\([^\"]*\\)\" value=\"false\"|\"shouldLoad-\\1\" value=\"true\"|g' $prefs" >/dev/null 2>&1 || true
+  # A plugin ATAK has registered but never been answered about has no entry at all and
+  # is "!should load, skipping" (Map Depot on the MacBook, 2026-09-26): one is added for
+  # every installed plugin package that lacks one.
+  local pkg
+  for pkg in $(adb_sh pm list packages 2>/dev/null | sed -n 's/^package:\(com\.atakmap\.android\..*\.plugin\)$/\1/p'); do
+    adb_sh "grep -q 'shouldLoad-$pkg\"' $prefs || sed -i 's|</map>|    <boolean name=\"shouldLoad-$pkg\" value=\"true\" />\n</map>|' $prefs" >/dev/null 2>&1 || true
+  done
   atak_launch
   emu_focus_fix
   ok "Plugin switched on; ATAK is restarting"
