@@ -7,6 +7,7 @@
 #   .\measure.ps1 -Gpu nvidia|intel|auto  which GPU Windows gives the emulator on a two-GPU laptop
 #   .\measure.ps1 -Location "lat,lon"    the GPS fix Android gets (the Mac sends the Mac's own; here a fixed one)
 #   .\measure.ps1 -EnablePlugins        switch every installed plugin on in ATAK and restart it (the Mac's takwerx plugin)
+#   .\measure.ps1 -NetTest              time the same downloads on Windows and inside Android; look for a VPN or proxy
 #   .\measure.ps1 -Stop                 power Android off
 # At the end the results folder is zipped and sent to the Mac on the switch (-Mac host:port),
 # where tools/measure-server.py serves this script and the ATAK APK and receives the results:
@@ -14,7 +15,7 @@
 # A development tool, not part of the product; findings in docs/DECISIONS.md, 2026-09-27.
 param(
   [ValidateSet('stock','angle')][string]$Mode = 'stock',
-  [switch]$AngleOverride, [switch]$AtakTweaks, [switch]$Stop, [switch]$EnablePlugins,
+  [switch]$AngleOverride, [switch]$AtakTweaks, [switch]$Stop, [switch]$EnablePlugins, [switch]$NetTest,
   [ValidateSet('auto','nvidia','intel')][string]$Gpu = 'auto',
   [string]$Location = '33.576257,-117.240598',
   [string]$Mac = '192.168.123.99:8000'
@@ -81,7 +82,50 @@ function AdbOut { (& $adb -s $serial @args 2>$null) -join "`n" }
 
 Say ("takwerx measure, mode {0}{1}{2}" -f $Mode, $(if ($AngleOverride) { ' + AngleOverride' }), $(if ($AtakTweaks) { ' + AtakTweaks' }))
 
-try {
+
+# ---- network: why tiles arrive slowly -------------------------------------------------------
+# The same downloads timed on Windows and inside Android, and what sits in the path on Windows.
+if ($NetTest) {
+  try {
+    Say 'network: timing downloads on Windows'
+    $u = 'http://dl.google.com/android/repository/platform-tools-latest-windows.zip'
+    for ($i = 1; $i -le 3; $i++) { Say ("windows throughput: " + (& curl.exe -s -o NUL -w "%{size_download} bytes in %{time_total}s = %{speed_download} B/s" $u)) }
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    for ($i = 1; $i -le 20; $i++) { & curl.exe -s -o NUL http://www.google.com/generate_204 }
+    Say ("windows round trip: 20 requests in {0} ms = {1} ms each" -f $sw.ElapsedMilliseconds, [int]($sw.ElapsedMilliseconds / 20))
+    $route = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Sort-Object RouteMetric | Select-Object -First 1
+    if ($route) { Say ("default route via: {0}" -f $route.InterfaceAlias) }
+    Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object Status -eq 'Up' | ForEach-Object { Say ("adapter up: {0} ({1}), {2}" -f $_.Name, $_.InterfaceDescription, $_.LinkSpeed) }
+    Say ("winhttp proxy: " + ((netsh winhttp show proxy) -join ' ' -replace '\s+', ' ').Trim())
+    $ie = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue
+    Say ("user proxy: enabled={0} server={1} pac={2}" -f $ie.ProxyEnable, $ie.ProxyServer, $ie.AutoConfigURL)
+    $agents = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '(?i)zscaler|zsatunnel|zsaservice|globalprotect|pangp|vpnagent|anyconnect|netskope|stagent|forti|csfalcon|sentinel|cylance|tanium|umbrella|ciscod' } | Select-Object -ExpandProperty ProcessName -Unique
+    Say ("network and security agents running: " + $(if ($agents) { $agents -join ', ' } else { 'none recognised' }))
+    try { $mp = Get-MpComputerStatus -ErrorAction Stop; Say ("defender: real-time {0}, mode {1}" -f $mp.RealTimeProtectionEnabled, $mp.AMRunningMode) } catch { Say 'defender: status not readable' }
+    if ([bool](EmuProcs)) {
+      Say 'network: timing the same inside Android'
+      $sh = @'
+# Timed HTTP from inside Android, over the emulator's network. No curl in the image: the request
+# goes through toybox nc; the clock is /proc/uptime (10 ms steps).
+now() { cut -d' ' -f1 /proc/uptime | tr -d .; }
+get() { printf 'GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: takwerx\r\nConnection: close\r\n\r\n' "$2" "$1" | nc -w 10 -q 30 "$1" 80 2>/dev/null | wc -c; }
+for i in 1 2 3; do
+  s=$(now); n=$(get dl.google.com /android/repository/platform-tools-latest-windows.zip); e=$(now)
+  ms=$(( (e - s) * 10 )); [ "$ms" -gt 0 ] || ms=1
+  echo "android throughput: $n bytes in $ms ms = $(( n / ms )) KB/s"
+done
+# Tiles are small, so the round trip is what a user feels: 20 requests one after another.
+s=$(now); for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do get www.google.com /generate_204 >/dev/null; done; e=$(now)
+echo "android round trip: 20 requests in $(( (e - s) * 10 )) ms = $(( (e - s) / 2 )) ms each"
+'@
+      $local = Join-Path $root 'nettest.sh'
+      [IO.File]::WriteAllText($local, ($sh -replace "`r`n", "`n"))
+      & $adb -s $serial push $local /data/local/tmp/nettest.sh 2>$null | Out-Null
+      (& $adb -s $serial shell sh /data/local/tmp/nettest.sh 2>$null) | ForEach-Object { Say $_ }
+    } else { Say 'Android is not running; the in-Android half is skipped' }
+  } catch { Say ("FAILED: {0}" -f $_.Exception.Message) }
+}
+if (-not $NetTest) { try {
 # ---- the machine ---------------------------------------------------------------------------
 $cs = Get-CimInstance Win32_ComputerSystem; $os = Get-CimInstance Win32_OperatingSystem
 $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
@@ -133,6 +177,12 @@ if ($Gpu -ne 'auto') {
   Remove-ItemProperty -Path $prefKey -Name $qemuExe -ErrorAction SilentlyContinue
   Say 'GPU preference for the emulator: Windows decides'
 }
+# The Windows preference above steers OpenGL and DirectX only. On ANGLE the emulator renders
+# through Vulkan and picks the Vulkan device itself (the discrete one by default); this is its
+# own switch, matched against the device name. Read at start, so it needs a fresh boot.
+if ($Gpu -eq 'intel') { $env:ANDROID_EMU_VK_SELECT_GPU = 'Intel' }
+elseif ($Gpu -eq 'nvidia') { $env:ANDROID_EMU_VK_SELECT_GPU = 'NVIDIA' }
+else { Remove-Item Env:ANDROID_EMU_VK_SELECT_GPU -ErrorAction SilentlyContinue }
 
 # ---- the AVD, written by hand as on the Mac (lib/emulator.sh emu_avd_create) ----------------
 $avdDir = Join-Path $env:ANDROID_AVD_HOME 'atak.avd'
@@ -214,7 +264,9 @@ if ($running) {
 } else {
   # Stale locks from a previous run; on Windows the emulator's locks are folders, hence -Recurse.
   Get-ChildItem $avdDir -Filter '*.lock' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
-  $features = 'VirtioTablet'; if ($Mode -eq 'angle') { $features = 'Vulkan,GuestAngle,VirtioTablet' }
+  # -WiFiPacketStream: Android's Wi-Fi on the emulator's own network stack, not streamed to netsim
+  # (on the Mac a small request went from about 800 ms to 41 ms; DECISIONS 2026-09-27).
+  $features = 'VirtioTablet,-WiFiPacketStream'; if ($Mode -eq 'angle') { $features = 'Vulkan,GuestAngle,VirtioTablet,-WiFiPacketStream' }
   $emuArgs = @('-avd', 'atak', '-port', '5574', '-gpu', 'host', '-feature', $features, '-no-snapshot', '-no-boot-anim')
   Say ("starting: emulator {0}" -f ($emuArgs -join ' '))
   $t0 = Get-Date
@@ -228,6 +280,9 @@ if ($running) {
   }
   if (-not $booted) { Say 'Android did not boot within 6 minutes (or the emulator exited). See emulator.log / emulator.err in the results.'; $skip = $true }
   else { Say ("Android booted in {0} s" -f [int]((Get-Date) - $t0).TotalSeconds) }
+  Get-Content (Join-Path $root 'emulator.log') -ErrorAction SilentlyContinue |
+    Where-Object { $_ -match 'ANDROID_EMU_VK_SELECT_GPU|Physical device \[|Selecting GPU|Selecting Vulkan device|Could not select the GPU' } |
+    ForEach-Object { Say ("emulator: " + $_.Trim()) }
 }
 
 if (-not $skip) {
@@ -360,7 +415,7 @@ if (-not $skip) {
   (AdbOut shell dumpsys SurfaceFlinger) | Set-Content (Join-Path $out 'surfaceflinger.txt')
   Copy-Item (Join-Path $avdDir 'config.ini') $out -ErrorAction SilentlyContinue
 }
-} catch { Say ("FAILED: {0}" -f $_.Exception.Message) }
+} catch { Say ("FAILED: {0}" -f $_.Exception.Message) } }
 
 # ---- ship the results to the Mac ------------------------------------------------------------
 foreach ($f in 'emulator.log', 'emulator.err') { try { Get-Content -Raw (Join-Path $root $f) -ErrorAction Stop | Set-Content (Join-Path $out $f) } catch {} }

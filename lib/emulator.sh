@@ -397,6 +397,11 @@ emu_running() { [ -n "$(emu_pid)" ]; }
 # Guest ANGLE on Vulkan on a Metal driver: the only path found where ATAK both runs on the
 # GPU and draws icons wider than 64 px. VirtioTablet makes the host pointer a real mouse in
 # Android (wheel as ACTION_SCROLL, buttons, hover) instead of synthetic touch swipes.
+# -WiFiPacketStream keeps Android's Wi-Fi on the emulator's own network stack instead of
+# streaming every packet to the netsim process: inside Android a small request took about
+# 800 ms that way against 41 ms without, and downloads ran at 3-4 MB/s against 8-10, which
+# is why map tiles arrived slowly (DECISIONS 2026-09-27). Android still sees a validated
+# Wi-Fi network; only netsim's device-to-device simulation is lost, which nothing here uses.
 # No -grpc: it listens on every interface with no authentication.
 emu_start() {
   [ -x "$ADB" ] || die "adb is missing (scrcpy is not installed). Run: takwerx init"
@@ -412,7 +417,7 @@ emu_start() {
   # shellcheck disable=SC2086  # EMU_ARGS is a list of arguments
   ANDROID_SDK_ROOT="$EMU_SDK" ANDROID_HOME="$EMU_SDK" ANDROID_AVD_HOME="$EMU_AVD_HOME" ANDROID_EMU_VK_SELECT_ICD="$EMU_VK" \
     nohup "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu host \
-      -feature "Vulkan,GuestAngle,VirtioTablet${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim $EMU_ARGS \
+      -feature "Vulkan,GuestAngle,VirtioTablet,-WiFiPacketStream${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim $EMU_ARGS \
       >>"$EMU_LOG" 2>&1 </dev/null &
   disown 2>/dev/null || true
 }

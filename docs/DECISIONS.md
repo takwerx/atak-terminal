@@ -2,6 +2,44 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-27, late afternoon: slow tiles were the emulator's netsim Wi-Fi, on both platforms. And the Intel GPU
+
+The operator saw map tiles arrive more slowly on the Dell than on the Mac. Timed with the
+same plain-HTTP requests on the host and from inside Android (`tools/windows-measure.ps1
+-NetTest`, toybox `nc` in Android, dl.google.com for throughput, 20 sequential requests to
+www.google.com/generate_204 for the round trip):
+
+| | Mac host | Dell host | Mac Android | Dell Android |
+|---|---|---|---|---|
+| download | 6-12 MB/s | 18-22 MB/s | 3.4-4.2 MB/s | 3.0-3.4 MB/s |
+| one small request | 40 ms | 113 ms | about 800 ms | about 1,070 ms |
+
+- **The Dell's own share**: three times the Mac's round trip on the host, on Wi-Fi with
+  CrowdStrike Falcon running (no proxy, no PAC, Tailscale up but not the default route).
+  That explains why its Android was somewhat worse than the Mac's, not the size of the gap.
+- **The emulator's share, on both machines**: twenty times the host's round trip. Since
+  emulator 33 Android's virtio Wi-Fi streams every packet over gRPC to the separate `netsimd`
+  process (`WiFiPacketStream`, "Successfully initialized netsim WiFi" in the log), which runs
+  its own NAT. With `-feature -WiFiPacketStream` the emulator keeps Wi-Fi on its built-in
+  stack: **41-47 ms a request and 8.5-9.7 MB/s inside Android on the Mac**, against 9-11.5 on
+  the host at the same moment. Android still reports a connected, VALIDATED Wi-Fi network
+  ("AndroidWifi", 10.0.2.16), ATAK held 8 live TCP connections, adb and the GPS fix were
+  unaffected. What is given up is netsim's simulation between emulators, unused here. Now the
+  default in `emu_start` and in the Windows measuring script; the Dell's number with it is
+  still to come. Of the time a request took before, about 45% was the name lookup (by IP:
+  422 ms, by name: 768 ms).
+- **The Intel Arc on ANGLE: 41-44 fps** zoomed into imagery (first window 27, while tiles
+  were still arriving), renderer `ANGLE (Intel, Vulkan 1.3.0 (Intel(R) Arc(TM) Pro Graphics),
+  Intel-0.406.668)`. So a laptop's integrated Intel graphics carries ATAK on Windows. Getting
+  there took the emulator's own switch: Windows' per-app GPU preference
+  (`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`) steers OpenGL and DirectX only,
+  and the emulator picks its Vulkan device itself, the discrete one by default. It reads
+  `ANDROID_EMU_VK_SELECT_GPU` at start and matches it against the device names
+  ("Selecting GPU (Intel(R) Arc(TM) Pro Graphics) at index 0").
+- **For the record, the scenes**: the Mac's 57-58 fps and the Dell NVIDIA's 48-51 were both
+  on the zoomed-out globe (the Mac at 3360x1380, the Dell at 1820x1050). The NVIDIA with
+  imagery and a live Cam Depot video in the side pane held 31-38.
+
 ## 2026-09-27, afternoon: Windows measured first. WHPX without admin, ANGLE at 50 fps, the stock path at 16
 
 The measure-first phase of `docs/PLAN-windows.md`, on the operator's work laptop: Dell
@@ -45,9 +83,9 @@ switch and posting its results back to `tools/measure-server.py`. What it found:
   them. Map Depot's entry then came and went from the Tools list while ATAK's registry kept
   it loaded (`Already loaded, skipping plugin extension ... MapDepot`), and ATAK never
   restarted: a Map Depot bug, seen on the Mac too, not the runtime's.
-- **Open:** the Intel Arc on ANGLE (Windows gave the emulator the NVIDIA by default); the
-  operator finds the dynamic range-and-bearing endpoint drag worse than on the Mac, a
-  Cursorwerx question for the tablet input on Windows.
+- **Open:** the operator finds the dynamic range-and-bearing endpoint drag worse than on the
+  Mac, a Cursorwerx question for the tablet input on Windows. (The Intel Arc: measured, see
+  the late-afternoon entry.)
 
 ## 2026-09-27, later: releases. Users receive tags, not the head of main
 

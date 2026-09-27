@@ -4,6 +4,13 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## Unreleased
+
+- Map tiles load several times faster. Android's Wi-Fi no longer detours through the
+  emulator's network simulator: a small request inside Android went from about 800 ms to
+  about 45 ms, downloads from 3-4 MB/s to your Mac's own speed. Takes effect at the next
+  start after `takwerx update` (`takwerx restart`).
+
 ## 0.1.1 — 2026-09-27
 
 - The window no longer quits when you click "..." on its side toolbar (the emulator's
