@@ -217,6 +217,26 @@ WRAP
   app_sign
 }
 
+# ATAK pinned in Android's dock next to Chrome. The launcher keeps its dock in a SQLite
+# database (one per grid size, launcher_<cols>_by_<rows>.db); a row with container -101
+# is a dock slot. ATAK goes in slot 0, Chrome sits in slot 1 after the trim, and the
+# launcher restarts to read it. What users saw before was the taskbar's "recent app"
+# tile, there only while ATAK runs (2026-09-27). Needs root; skipped without it.
+emu_dock_atak() {
+  local db act now
+  "$ADB" -s "$ADB_ENDPOINT" root >/dev/null 2>&1 || return 0
+  with_timeout 30 "$ADB" -s "$ADB_ENDPOINT" wait-for-device >/dev/null 2>&1 || true
+  db=$(adb_sh 'ls /data/data/com.google.android.apps.nexuslauncher/databases/launcher*.db 2>/dev/null' | head -n1)
+  [ -n "$db" ] || return 0
+  act=$(adb_sh cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$ATAK_PACKAGE" 2>/dev/null | tail -n1)
+  [ -n "$act" ] || return 0
+  adb_sh "sqlite3 $db \"select count(*) from favorites where container=-101 and intent like '%$ATAK_PACKAGE%'\"" 2>/dev/null | grep -q '^[1-9]' && return 0
+  now=$(date +%s)000
+  adb_sh "sqlite3 $db \"insert into favorites (title,intent,container,screen,cellX,cellY,spanX,spanY,itemType,appWidgetId,modified,restored,profileId,rank,options) values ('ATAK','#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;launchFlags=0x10200000;component=$act;end',-101,0,0,0,1,1,0,-1,$now,0,0,0,0)\"" >/dev/null 2>&1 || return 0
+  adb_sh am force-stop com.google.android.apps.nexuslauncher >/dev/null 2>&1 || true
+  log "ATAK pinned in Android's dock"
+}
+
 # The app's emulator copy is gone (the app was deleted or rebuilt from scratch): put it back.
 emu_bundle_check() {
   [ -f "$EMU_DIR/qemu/darwin-aarch64/qemu-system-aarch64.bin" ] || return 0

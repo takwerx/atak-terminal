@@ -151,10 +151,21 @@ scales the same picture; `takwerx display` changes the size Android is given, wh
 restarts Android. ATAK lays out its toolbar from the screen size, so a bigger or
 denser screen means more toolbar slots.
 
-Chrome, and the Android app drawer, stay in Android's dock at the bottom. Everything
+ATAK and Chrome sit in Android's dock at the bottom, with the app drawer. Everything
 else Google ships in the image is switched off at install (Gmail, YouTube, Maps, Play
 services and the rest). Take a package out of `EMU_TRIM_APPS` in `~/.takwerx/config`
 to keep it.
+
+**Tips for ATAK on a big screen**, in ATAK's Settings:
+
+- **Use large icons** for the toolbar. The screen has the room, and the icons are
+  easier to hit with a mouse.
+- **Force extra icons in landscape.** The toolbar then shows up to ten tools before
+  they go into the overflow menu.
+- **DeX mode.** ATAK's desktop mode, meant for Samsung DeX, suits a windowed desktop
+  the same way.
+- Keep the toolbar to the tools you use. More tools than the bar has slots for
+  overlap when a pane is open.
 
 ## Runtimes
 

@@ -328,6 +328,7 @@ atak_install() {
   atak_grant
   config_set ATAK_APK "$apk"
   ok "ATAK $(atak_version) installed"
+  if [ "$(runtime)" = emulator ]; then emu_dock_atak; fi
 }
 
 # Grants everything ATAK would otherwise ask for on first run, including the two that
