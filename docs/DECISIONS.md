@@ -50,6 +50,14 @@ nailed it". What it does and why, each one a separate hour:
   becomes `l`; printf ignores arguments a format does not use. The binary is then re-signed
   ad hoc with the entitlements it had: never Google's signed binary again, and macOS may
   ask once. The name went Viewer -> Terminal the same evening.
+- **Resizing the window while ATAK runs can freeze it.** ATAK "isn't responding" at 16:59:
+  its GL thread stuck in `BufferQueueProducer::dequeueBuffer` under
+  `vkAcquireNextImageKHR`, the UI thread waiting on it in `GLThread.onWindowResize`, after
+  the emulator had rebuilt its window swapchain 113 times at sizes down to 1251x514 as the
+  window was dragged about. The two KosmicKrisp aborts earlier also came right after
+  swapchain rebuilds. So: size the window once (maximize) and leave it. Untested lead:
+  `-feature -VulkanNativeSwapchain` takes the host swapchain out of that path. Recovery is
+  a restart of ATAK only; the emulator is fine.
 - **A clean stop is ATAK's QUITAPP, `sync`, then `reboot -p`**; the emulator exits by
   itself in ~4 s. `adb emu kill` is a pulled plug and cost Feature Layer its layer list.
 - **The splash is ATAK's own supported one:** `atak/support/atak_splash.png` (under
