@@ -103,9 +103,10 @@ function Test-Hypervisor {
     Log "accel-check: $r"
     Write-Host ''
     Write-Host 'Windows Hypervisor Platform is off. Android needs it, and switching it on needs an administrator once, then a restart:' -ForegroundColor Yellow
-    Write-Host '  Settings > System > Optional features > More Windows features > Windows Hypervisor Platform'
+    Write-Host '  Start, type "Turn Windows features on or off", tick Windows Hypervisor Platform, OK, restart'
     Write-Host '  or, in PowerShell as Administrator:  Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -All'
-    Write-Host '  Virtualization (Intel VT-x or AMD-V) must also be on in the PC''s firmware settings.'
+    Write-Host '  Virtualization (Intel VT-x or AMD SVM) must also be on in the PC''s firmware; Task Manager,'
+    Write-Host '  Performance, CPU shows "Virtualization: Enabled". On a work PC, ask IT. Then run the install line again.'
     if (Confirm-Yes 'Switch it on now (Windows asks for an administrator)?') {
         try {
             Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -Verb RunAs -Wait -ArgumentList '-NoProfile -Command "Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -All -NoRestart"'

@@ -260,9 +260,22 @@ and it is the path for Intel Macs. Both keep their own Android data.
   first is for reading the ATAK APK, the second for `takwerx location here`.
 - **Windows: "takwerx is not recognized".** Open a new PowerShell window; the install
   adds the command for windows opened after it.
-- **Windows: Windows Hypervisor Platform is off.** Settings, System, Optional
-  features, More Windows features, tick Windows Hypervisor Platform, restart; or ask
-  IT. Then `takwerx init` again.
+- **Windows: "Windows Hypervisor Platform is off."** Android runs on a part of Windows
+  that is switched off on many home PCs. It is switched on once, by an administrator,
+  then Windows restarts:
+  1. The easy way: when the installer offers to switch it on, answer `y` and approve
+     Windows' administrator prompt. Or by hand: open Start, type **Turn Windows
+     features on or off**, tick **Windows Hypervisor Platform**, OK.
+  2. Restart Windows.
+  3. Run the install line again. What it already downloaded is kept, so it carries on
+     where it stopped.
+
+  If it still says the same after the restart, the PC's own virtualization is off in
+  its firmware (BIOS or UEFI). Task Manager shows it: Performance, CPU, "Virtualization:
+  Enabled" or "Disabled". Turning it on is a setting in the firmware menu, reached at
+  power-on, called Intel VT-x, Intel Virtualization Technology or AMD SVM, depending on
+  the PC's maker. On a work PC where you are not an administrator, ask your IT
+  department to enable Windows Hypervisor Platform.
 - **Windows: the position is wrong or missing.** `takwerx location here` uses Windows'
   location service: Settings, Privacy & security, Location, with "Let desktop apps
   access your location" on. Or `takwerx location LAT,LON`.
