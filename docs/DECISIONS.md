@@ -43,6 +43,15 @@ was measured there over SSH while the operator used it.
   minutes only; `appops set ... FINE_LOCATION_SOURCE ignore` does not take. Not fixed;
   the log buffer is 32 MiB now so it no longer hides everything else. A candidate is
   disabling the Google apps ATAK does not need, which also frees guest memory.
+- **The stock Google apps are off; Chrome stays.** The operator wants only Chrome in
+  the dock. Provisioning now `pm disable-user`s Gmail, YouTube, YouTube Music, Photos,
+  Messages, Phone, the Google app, Wellbeing, Maps, Docs, Calendar, Contacts, Clock,
+  System Intelligence (both packages) and Android Auto (`EMU_TRIM_APPS`, overridable),
+  then restarts the launcher, without which the taskbar keeps showing the old dock.
+  After the guest RAM change and the trim the MacBook reports 1.2 GiB free instead of
+  0.5; the operator: "much faster on the tiles". With System Intelligence off the taskbar
+  shows only the pinned Chrome and the app in use. Files (documentsui), TTS and Play
+  services stay: ATAK's import picker, its speech, and Chrome sign-in use them.
 - **A crash-restart of ATAK does not ask "load plugins?" here**: after the display stack
   restart, `am start` brought ATAK back with every plugin loaded and no dialog.
 

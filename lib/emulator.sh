@@ -27,6 +27,16 @@ EMU_VK=$(config_get EMU_VK moltenvk)
 # takes the host's native swapchain out of the presentation path, the suspect for ATAK's
 # occasional "isn't responding" (DECISIONS 2026-09-26).
 EMU_FEATURES=$(config_get EMU_FEATURES "")
+# Google apps the image ships that the terminal has no use for. Off at provisioning, so
+# they neither sit in memory nor fill the dock; Chrome stays. Override in the config to
+# keep some, or set it empty to keep them all.
+EMU_TRIM_APPS=$(config_get EMU_TRIM_APPS "com.google.android.gm com.google.android.youtube
+  com.google.android.apps.youtube.music com.google.android.apps.photos
+  com.google.android.apps.messaging com.google.android.dialer
+  com.google.android.googlequicksearchbox com.google.android.apps.wellbeing
+  com.google.android.apps.maps com.google.android.apps.docs com.google.android.calendar
+  com.google.android.contacts com.google.android.deskclock com.google.android.as
+  com.google.android.as.oss com.google.android.projection.gearhead")
 EMU_MVK_LIB="$EMU_MVK_DIR/libMoltenVK.dylib"
 EMU_KK_LIB=/opt/homebrew/opt/mesa/lib/libvulkan_kosmickrisp.dylib
 ANDROID_SDK_TERMS=https://developer.android.com/studio/terms
@@ -302,8 +312,29 @@ emu_wait() {
 
 # Idempotent settings for a desktop instance on this runtime. The screen size is the AVD's
 # own (emu_configure_avd); only the UI density is applied over it.
+# The stock Google apps: each one that is still enabled is switched off for the user.
+# Cheap and idempotent, so it runs on every boot. A 16 GiB MacBook's 4 GiB guest had
+# the Google app, YouTube, Wellbeing and System Intelligence resident at 80 to 180 MiB
+# each while it swapped (2026-09-26).
+emu_trim_apps() {
+  local pkg enabled n=0
+  [ -n "$EMU_TRIM_APPS" ] || return 0
+  enabled=$(adb_sh pm list packages -e --user 0 2>/dev/null | sed 's/^package://')
+  for pkg in $EMU_TRIM_APPS; do
+    echo "$enabled" | grep -qx "$pkg" || continue
+    adb_sh pm disable-user --user 0 "$pkg" >/dev/null 2>&1 && n=$((n + 1))
+  done
+  if [ "$n" -gt 0 ]; then
+    log "switched off $n Google apps (Chrome stays)"
+    # The taskbar keeps showing the old dock until the launcher restarts.
+    adb_sh am force-stop com.google.android.apps.nexuslauncher >/dev/null 2>&1 || true
+  fi
+  return 0
+}
+
 emu_provision() {
   local tz w h dpi
+  emu_trim_apps
   # Before ATAK starts, and on every boot (a debug property does not persist). ANGLE builds
   # each program's pipeline at link time with float placeholders for integer attributes of
   # its own; Metal rejects that pipeline ("uint2 cannot be read using ...Float4"), the link
