@@ -36,11 +36,10 @@ preview, the zip you were sent has everything:
 bash ~/Downloads/takwerx-desktop/takwerx init
 ```
 
-3. When ATAK is up, drag the plugin APKs from the zip's `plugins` folder onto the
-   ATAK window, one at a time. ATAK installs each and asks to load it.
-
-Everything else is the same: the **TAKwerx ATAK Terminal** icon in Applications and
-the Dock, `takwerx` in new terminals. macOS may ask once to let Terminal use Downloads.
+That is all. The TAKWERX Market plugin installs itself, and every other plugin comes
+through the Market inside ATAK. Everything else is the same: the **TAKwerx ATAK
+Terminal** icon in Applications and the Dock, `takwerx` in new terminals. macOS may
+ask once to let Terminal use Downloads.
 
 ## What you need
 

@@ -20,11 +20,14 @@ the compromise.
 
 - **Team preview ships as a zip, the repository stays private** (operator, 2026-09-26
   night: "ready to share to my small team to get some feedback"). The zip is the
-  repository at HEAD plus a `plugins` folder with the operator's own plugin builds; the
-  ATAK APK is never in it. Install is `bash ~/Downloads/takwerx-desktop/takwerx init`,
-  which is what the MacBook did earlier tonight, then the plugins are dragged onto the
-  window, which the emulator installs and ATAK offers to load ("dragging is so clutch").
-  The curl line in the README waits for the repository to go public.
+  repository at HEAD and nothing else: no ATAK APK ever, and no plugins either, by the
+  operator's call ("it only needs one plugin, the Market"): init installs the Market and
+  the rest comes through it inside ATAK. Install is
+  `bash ~/Downloads/takwerx-desktop/takwerx init`, which is what the MacBook did
+  earlier tonight. Dragging an APK onto the window also installs it and ATAK offers to
+  load it ("dragging is so clutch"), which is the answer for any plugin outside the
+  Market. Cursorwerx, which carries the mouse fixes, is not in the Market yet. The curl
+  line in the README waits for the repository to go public.
 - **The app is "TAKwerx ATAK Terminal"** (was ATAK.app; an old bundle with our
   identifier is removed by `app_build`; `takwerx app` rebuilds the icon on demand).
 - **Its icon is ATAK's own**, taken from the APK on the user's disk at build time, the
