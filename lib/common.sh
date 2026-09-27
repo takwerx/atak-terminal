@@ -194,5 +194,11 @@ find_atak_apk() {
     printf '%s\t%s\t%s\n' "$v" "$(stat -f %m "$f" 2>/dev/null || echo 0)" "$f"
   done | sort -t "$(printf '\t')" -k1,1V -k2,2n | tail -n1 | cut -f3- || true
 }
-# ATAK-5.8.0.4-174b425-civ-release.apk or ATAK-CIV-5.8.0.4-...apk -> 5.8.0.4; plugins -> nothing
-apk_version_from_name() { basename "$1" | sed -nE 's/^[Aa][Tt][Aa][Kk]-([Cc][Ii][Vv]-)?([0-9]+(\.[0-9]+)+)[-.].*[Cc][Ii][Vv].*\.apk$/\2/p'; }
+# ATAK-5.8.0.4-174b425-civ-release.apk, ATAK-CIV-5.8.0.4-...apk, the civ "small" build:
+# -> 5.8.0.4. The name must say civ somewhere (this runtime is for ATAK-CIV's package)
+# and start with ATAK and a version; plugins (ATAK-Plugin-...) give nothing.
+apk_version_from_name() {
+  local n; n=$(basename "$1")
+  printf '%s' "$n" | grep -qi civ || return 0
+  printf '%s' "$n" | sed -nE 's/^[Aa][Tt][Aa][Kk]-([Cc][Ii][Vv]-)?([0-9]+(\.[0-9]+)+)[-.].*\.apk$/\2/p'
+}
