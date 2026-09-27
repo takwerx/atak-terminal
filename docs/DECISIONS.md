@@ -39,6 +39,12 @@ desktop shortcuts. Measured and decided on the way:
   waited only for ATAK's preferences file, which exists from the first launch. It now waits
   for `AgreedToEULA` = true in that file (ATAK's `EulaHelper`), on both engines. Not yet
   re-measured on a fresh install.
+- **ATAK updated from 5.7 to 5.8 through the Market, inside the Windows engine.** Official
+  ATAK-CIV 5.7.0.3 on the Dell, the Market's two-step handoff (its own 5.8 build first, then
+  ATAK through Android's installer, two prompts): ATAK came back on 5.8 with the Market
+  loaded. The operator: "boom baby". The Market's README had this path as verified on the
+  developer build only; this is the first run on an official ATAK, and it needed nothing
+  from takwerx (ATAK holds REQUEST_INSTALL_PACKAGES from `Grant-Atak`).
 
 ## 2026-09-27, evening: ATAK never received takwerx's quit. `takwerx plugin` and `down` now stop it for real
 
