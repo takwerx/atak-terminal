@@ -162,7 +162,12 @@ function Invoke-Update {
     Rename-Item $new (Split-Path $App -Leaf)
     Remove-Item -Recurse -Force $old -ErrorAction SilentlyContinue
     & (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File (Join-Path $App 'takwerx.ps1') init --no-up
-    if ((Test-EmuRunning)) { Warn 'Android is running the previous build; takwerx restart loads the new one' }
+    $newVersion = (Get-Content (Join-Path $App 'VERSION') -Raw).Trim()
+    if ($newVersion -eq $TakwerxVersion) { Ok "takwerx $newVersion is current"; return }
+    Ok "takwerx $TakwerxVersion -> $newVersion"
+    # The running Android and its watcher were started by the old takwerx; the Google side
+    # changes only when versions.env does, and init has already fetched that.
+    if (Test-EmuRunning) { Warn "Android is still running as takwerx $TakwerxVersion started it; takwerx restart brings it up under $newVersion" }
 }
 
 function Invoke-Main([string[]]$a) {

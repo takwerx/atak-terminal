@@ -4,6 +4,11 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## Unreleased
+
+- Windows: `takwerx update` says which version it moved to, and asks for a restart only
+  when there is a new version for the running Android to pick up.
+
 ## 0.2.0 — 2026-09-27
 
 - **Windows.** One line in PowerShell installs TAKwerx ATAK Terminal on a Windows 10 or 11
