@@ -89,7 +89,10 @@ was measured there over SSH while the operator used it.
   service is Android's, not GMS's), Chrome still opening pages with no dialog, one
   `GoogleApiAvailability: ConnectionResult=3` warning at Chrome start. Lost: signing
   into a Google account inside Chrome. GMS is first in `EMU_TRIM_APPS`; take it out of
-  the list in the config to keep it.
+  the list in the config to keep it. One follow-on: "Enable Google Play services.
+  Settings Services won't work unless you enable Google Play services", a notification
+  from `com.google.android.settings.intelligence` (Google's Settings suggestions), so
+  that package is trimmed too.
 - **SystemUI must restart after provisioning, every boot.** It starts before takwerx
   can set ANGLE's `warmUpPipelineCacheAtLink` override (a debug property, gone at each
   boot), and without it HWUI's shaders fail to compile on MoltenVK: `skia: Shader

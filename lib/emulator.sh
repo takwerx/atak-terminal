@@ -33,14 +33,17 @@ EMU_FEATURES=$(config_get EMU_FEATURES "")
 # providers take every GNSS fix and each one failed to reach its own dead callback, a
 # 15-line stack trace up to 300 times a second in the system log (2026-09-26). Without
 # it ATAK's GPS feed is untouched (the GNSS service is Android's), Chrome opens pages,
-# and only a Google-account sign-in inside Chrome is lost.
+# and only a Google-account sign-in inside Chrome is lost. Settings Services
+# (settings.intelligence) goes with it: it is what posts "Enable Google Play services"
+# once Play services is off.
 EMU_TRIM_APPS=$(config_get EMU_TRIM_APPS "com.google.android.gms com.google.android.gm com.google.android.youtube
   com.google.android.apps.youtube.music com.google.android.apps.photos
   com.google.android.apps.messaging com.google.android.dialer
   com.google.android.googlequicksearchbox com.google.android.apps.wellbeing
   com.google.android.apps.maps com.google.android.apps.docs com.google.android.calendar
   com.google.android.contacts com.google.android.deskclock com.google.android.as
-  com.google.android.as.oss com.google.android.projection.gearhead")
+  com.google.android.as.oss com.google.android.projection.gearhead
+  com.google.android.settings.intelligence")
 EMU_MVK_LIB="$EMU_MVK_DIR/libMoltenVK.dylib"
 EMU_KK_LIB=/opt/homebrew/opt/mesa/lib/libvulkan_kosmickrisp.dylib
 ANDROID_SDK_TERMS=https://developer.android.com/studio/terms
