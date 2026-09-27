@@ -6,8 +6,11 @@ icon mentions a new release within a day of it, and so do `takwerx up` and
 
 ## Unreleased
 
-- Windows: `takwerx update` says which version it moved to, and asks for a restart only
-  when there is a new version for the running Android to pick up.
+- `takwerx update` finishes by itself: if Android is running on what the update
+  replaced, it is restarted onto the new version (a clean power-off, about a minute) and
+  ATAK reopens with its data. No `takwerx restart` afterwards.
+- ATAK's permissions are re-applied at every start, so ATAK does not ask for file access
+  again after a restart.
 
 ## 0.2.0 — 2026-09-27
 

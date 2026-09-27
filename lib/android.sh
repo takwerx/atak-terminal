@@ -344,16 +344,14 @@ atak_install() {
 # Grants everything ATAK would otherwise ask for on first run, including the two that
 # live outside the runtime-permission model: all-files access and installing APKs.
 # The second is what lets the TAKWERX Market plugin update plugins from inside ATAK.
+# One adb round trip: it also runs at every boot (emu_provision), since ATAK asked for file
+# access again after a restart on Windows (2026-09-27).
 atak_grant() {
-  local op perm
-  for op in MANAGE_EXTERNAL_STORAGE REQUEST_INSTALL_PACKAGES SYSTEM_ALERT_WINDOW; do
-    adb_sh appops set "$ATAK_PACKAGE" "$op" allow >/dev/null 2>&1 || true
-  done
-  for perm in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION ACCESS_BACKGROUND_LOCATION POST_NOTIFICATIONS \
-              READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE CAMERA RECORD_AUDIO READ_PHONE_STATE \
-              BLUETOOTH_CONNECT BLUETOOTH_SCAN NEARBY_WIFI_DEVICES; do
-    adb_sh pm grant "$ATAK_PACKAGE" "android.permission.$perm" >/dev/null 2>&1 || true
-  done
+  adb_sh "P=$ATAK_PACKAGE
+    for op in MANAGE_EXTERNAL_STORAGE REQUEST_INSTALL_PACKAGES SYSTEM_ALERT_WINDOW; do appops set \$P \$op allow >/dev/null 2>&1; done
+    for perm in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION ACCESS_BACKGROUND_LOCATION POST_NOTIFICATIONS \
+      READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE CAMERA RECORD_AUDIO READ_PHONE_STATE \
+      BLUETOOTH_CONNECT BLUETOOTH_SCAN NEARBY_WIFI_DEVICES; do pm grant \$P android.permission.\$perm >/dev/null 2>&1; done; true" >/dev/null 2>&1 || true
 }
 
 plugin_install() {

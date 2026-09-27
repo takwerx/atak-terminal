@@ -259,6 +259,17 @@ echo provisioned
     Set-AtakSplash $g[0] $g[1]
 }
 
+# The takwerx version the running Android was brought up under, from its watcher; empty
+# when the watcher predates 0.2.1 or none runs. `takwerx update` restarts Android when it
+# differs, so the running system is the new one.
+function Get-RunningVersion {
+    $marker = Join-Path $State 'watcher.pid'
+    if (-not (Test-Path $marker)) { return '' }
+    $f = (Get-Content $marker -Raw).Trim() -split ' '
+    if ($f.Count -ge 3) { return $f[2] }
+    return ''
+}
+
 function Start-Watcher {
     $p = Get-EmuProcess
     if (-not $p) { return }
@@ -279,7 +290,13 @@ function Invoke-EmuUp {
     }
     Ok 'Android is up'
     Start-Watcher
-    if (-not $script:Provisioned) { Invoke-Provision; $script:Provisioned = $true }
+    if (-not $script:Provisioned) {
+        Invoke-Provision
+        # ATAK's permissions, again at every start: Android keeps them across a restart, and
+        # yet ATAK asked for file access after one on the Dell (2026-09-27). Idempotent.
+        if (Test-AtakInstalled) { Grant-Atak }
+        $script:Provisioned = $true
+    }
     Send-Position
 }
 
@@ -307,7 +324,7 @@ function Stop-Emu {
 #   - ATAK restarted when Android reports it not responding (emu_watchdog), and ATAK's
 #     load-plugins question after that restart answered, since the user chose those plugins.
 function Invoke-Watch([int]$qemuPid) {
-    Set-Content -Path (Join-Path $State 'watcher.pid') -Value "$PID $qemuPid" -Encoding ASCII
+    Set-Content -Path (Join-Path $State 'watcher.pid') -Value "$PID $qemuPid $TakwerxVersion" -Encoding ASCII
     if (Import-Native) { [Takwerx.Native]::StayAwake() }
     $last = ''; $tick = 0
     while (Get-Process -Id $qemuPid -ErrorAction SilentlyContinue) {

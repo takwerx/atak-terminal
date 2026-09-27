@@ -61,7 +61,17 @@ function Invoke-Init([string[]]$a) {
     Test-Hypervisor
     Set-TakwerxPath
     Build-App
-    if (-not $open) { Ok 'Installed'; return }
+    if (-not $open) {
+        Ok 'Installed'
+        # After `takwerx update`: an Android brought up by an older takwerx is restarted, so
+        # everything running is the new version. A clean power-off; ATAK and its data return.
+        if ((Test-EmuRunning) -and (Get-RunningVersion) -ne $TakwerxVersion) {
+            Step "Restarting Android under takwerx $TakwerxVersion (about a minute; ATAK and its data come back)"
+            Stop-Emu
+            Invoke-Up
+        }
+        return
+    }
     Invoke-EmuUp
     if (-not $apk -and -not (Test-AtakInstalled)) {
         $found = Find-AtakApk
@@ -162,12 +172,9 @@ function Invoke-Update {
     Rename-Item $new (Split-Path $App -Leaf)
     Remove-Item -Recurse -Force $old -ErrorAction SilentlyContinue
     & (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File (Join-Path $App 'takwerx.ps1') init --no-up
+    # The new takwerx's init has restarted a running Android if it was the old one's.
     $newVersion = (Get-Content (Join-Path $App 'VERSION') -Raw).Trim()
-    if ($newVersion -eq $TakwerxVersion) { Ok "takwerx $newVersion is current"; return }
-    Ok "takwerx $TakwerxVersion -> $newVersion"
-    # The running Android and its watcher were started by the old takwerx; the Google side
-    # changes only when versions.env does, and init has already fetched that.
-    if (Test-EmuRunning) { Warn "Android is still running as takwerx $TakwerxVersion started it; takwerx restart brings it up under $newVersion" }
+    if ($newVersion -eq $TakwerxVersion) { Ok "takwerx $newVersion is current" } else { Ok "takwerx $TakwerxVersion -> $newVersion" }
 }
 
 function Invoke-Main([string[]]$a) {

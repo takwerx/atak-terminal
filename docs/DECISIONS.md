@@ -46,6 +46,20 @@ desktop shortcuts. Measured and decided on the way:
   zip from GitHub, `init --no-up` under 0.2.0, Android and ATAK kept. The first attempt
   ran in the window that still had `TAKWERX_SOURCE` set from the development install and
   fetched the Mac's copy instead; that variable lives only as long as its window.
+- **`takwerx update` now restarts a stale Android itself** (operator: "we cant make it auto
+  restart?"). The new version decides, not the old updater, so it works from an older
+  install: on Windows the watcher records the takwerx version it runs under
+  (`state\watcher.pid`) and `init --no-up` restarts Android when it differs; on the Mac,
+  `init_emulator` restarts when the emulator copy is not the current build
+  (`emu_copy_current`), since every other change is applied by the settings pass init
+  already runs. Measured on the Mac with the copy's tag set back to r11: stopped, rebuilt at
+  r12, booted, ATAK back in a new process. Re-signing the app under a running emulator is
+  safe: `codesign --force` writes a new file (inode 71515023 to 71522233) and the running
+  process kept its own, alive and answering 60 s later.
+- **ATAK asked for file access again after a restart on the Dell.** Android keeps granted
+  permissions across a reboot, so the cause is not known yet; ATAK's permissions are now
+  granted again at every boot on both engines (one adb round trip on the Mac, 1 s).
+- **Range-and-bearing drag on Windows:** fine after all (operator, later the same night).
 - **ATAK updated from 5.7 to 5.8 through the Market, inside the Windows engine.** Official
   ATAK-CIV 5.7.0.3 on the Dell, the Market's two-step handoff (its own 5.8 build first, then
   ATAK through Android's installer, two prompts): ATAK came back on 5.8 with the Market

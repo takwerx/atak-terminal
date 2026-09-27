@@ -459,6 +459,7 @@ emu_trim_apps() {
 emu_provision() {
   local tz w h dpi
   emu_trim_apps
+  if atak_installed; then atak_grant; fi
   # Chrome on guest ANGLE: its GPU process cannot create the native fence sync objects
   # the SurfaceControl path needs ("Failed to create android native fence sync object",
   # then the GPU context is lost), exits, and restarts about every two seconds. Pages
