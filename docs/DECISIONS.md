@@ -78,9 +78,12 @@ nailed it". What it does and why, each one a separate hour:
   `vkAcquireNextImageKHR`, the UI thread waiting on it in `GLThread.onWindowResize`, after
   the emulator had rebuilt its window swapchain 113 times at sizes down to 1251x514 as the
   window was dragged about. The two KosmicKrisp aborts earlier also came right after
-  swapchain rebuilds. So: size the window once (maximize) and leave it. Untested lead:
-  `-feature -VulkanNativeSwapchain` takes the host swapchain out of that path. Recovery is
-  a restart of ATAK only; the emulator is fine.
+  swapchain rebuilds. A second stall at 17:34, same stacks, came with **no** rebuild since
+  the first, so resizing is not the trigger; the presentation path stalls on its own after
+  30-40 minutes of use, on MoltenVK as this stall and on KosmicKrisp as the fence abort.
+  Untested lead: `-feature -VulkanNativeSwapchain` takes the host swapchain out of that
+  path; needs a run of an hour or more under synthetic use. Recovery is a restart of ATAK
+  only; the emulator is fine.
 - **A clean stop is ATAK's QUITAPP, `sync`, then `reboot -p`**; the emulator exits by
   itself in ~4 s. `adb emu kill` is a pulled plug and cost Feature Layer its layer list.
 - **The splash is ATAK's own supported one:** `atak/support/atak_splash.png` (under
