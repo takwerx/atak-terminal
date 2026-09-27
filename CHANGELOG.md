@@ -4,24 +4,26 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
-## Unreleased
+## 0.2.0 — 2026-09-27
 
-- Map tiles load several times faster. Android's Wi-Fi no longer detours through the
-  emulator's network simulator: a small request inside Android went from about 800 ms to
-  about 45 ms, downloads from 3-4 MB/s to your Mac's own speed. Takes effect at the next
-  start after `takwerx update` (`takwerx restart`).
 - **Windows.** One line in PowerShell installs TAKwerx ATAK Terminal on a Windows 10 or 11
-  PC with an Intel or AMD processor: `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`.
+  PC with an Intel or AMD processor:
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`.
   The same commands as on the Mac, ATAK on the PC's GPU, a Start Menu and desktop icon,
   one taskbar button with ATAK's icon. No administrator needed where Windows Hypervisor
-  Platform is already on; the installer says how when it is not.
-- The app's icon is ATAK's own. It never was with a release ATAK: those APKs rename their
-  image files, and takwerx fell back to its own icon. `takwerx app` rebuilds it.
+  Platform is already on; the installer says how to switch it on where it is not.
+- Map tiles load several times faster. Android's Wi-Fi no longer detours through the
+  emulator's network simulator: a small request inside Android went from about 800 ms to
+  about 45 ms, downloads from 3-4 MB/s to your connection's own speed.
+- The app's icon is ATAK's own. With a release ATAK it never was: those APKs rename their
+  image files, and takwerx fell back to its own icon.
 - After ATAK's first start, ATAK asks to load the Market once you have accepted its EULA;
-  it could be asked too early before and not ask at all.
+  before, it could be asked too early and then not ask at all.
 - `takwerx plugin` restarts ATAK for real, so a plugin it installs is loaded right away.
   ATAK never received the quit takwerx sent it; `takwerx down` and `takwerx atak` now stop
   it properly too.
+
+On a Mac: `takwerx update`, then `takwerx restart`.
 
 ## 0.1.1 — 2026-09-27
 
