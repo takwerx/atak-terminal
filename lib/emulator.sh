@@ -23,6 +23,10 @@ EMU_LOG="$TAKWERX_LOGS/emulator.log"
 # (VK_TIMEOUT); still available for development if Homebrew's mesa is present. The emulator
 # bundles older copies of both (MoltenVK 1.4.0 cannot build ANGLE's pipelines at all).
 EMU_VK=$(config_get EMU_VK moltenvk)
+# Extra emulator feature flags, comma-separated, for trials: e.g. "-VulkanNativeSwapchain"
+# takes the host's native swapchain out of the presentation path, the suspect for ATAK's
+# occasional "isn't responding" (DECISIONS 2026-09-26).
+EMU_FEATURES=$(config_get EMU_FEATURES "")
 EMU_MVK_LIB="$EMU_MVK_DIR/libMoltenVK.dylib"
 EMU_KK_LIB=/opt/homebrew/opt/mesa/lib/libvulkan_kosmickrisp.dylib
 ANDROID_SDK_TERMS=https://developer.android.com/studio/terms
@@ -266,10 +270,10 @@ emu_start() {
   rm -f "$EMU_AVD_HOME/$EMU_AVD.avd/"*.lock
   emu_configure_avd
   step "Starting Android on the GPU ($EMU_AVD, $(emu_geometry | awk '{print $1"x"$2" at "$3" dpi"}'))"
-  log "emulator start: $(tool_version "$EMU_DIR")"
+  log "emulator start: $(tool_version "$EMU_DIR")${EMU_FEATURES:+, features $EMU_FEATURES}"
   ANDROID_SDK_ROOT="$EMU_SDK" ANDROID_HOME="$EMU_SDK" ANDROID_AVD_HOME="$EMU_AVD_HOME" ANDROID_EMU_VK_SELECT_ICD="$EMU_VK" \
     nohup "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu host \
-      -feature Vulkan,GuestAngle,VirtioTablet -no-snapshot -no-boot-anim \
+      -feature "Vulkan,GuestAngle,VirtioTablet${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim \
       >>"$EMU_LOG" 2>&1 </dev/null &
   disown 2>/dev/null || true
 }
