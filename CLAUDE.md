@@ -1,14 +1,19 @@
 # atak-terminal (TAKwerx ATAK Terminal)
 
-Real ATAK in a desktop window: redroid (Android in a container) inside a Lima VM on macOS,
-scrcpy as the window, a bash engine (`takwerx`) driving it all. Read `README.md` for what it
-does and `docs/DECISIONS.md` for every non-obvious finding and why; do not re-derive those.
+Real ATAK in a desktop window, a bash engine (`takwerx`) driving it all. Two runtimes:
+the default on Apple Silicon is Google's Android Emulator on the Mac's GPU (`lib/emulator.sh`,
+no VM); the other is redroid (Android in a container) inside a Lima VM with scrcpy as the
+window, for LAN multicast and Intel Macs. Public beta since 2026-09-26, Mac only. Read
+`README.md` for what it does and `docs/DECISIONS.md` for every non-obvious finding and
+why; do not re-derive those. Windows is next: `docs/PLAN-windows.md` is the brief.
 
 ## Layout
 
-- `takwerx`: the CLI. `lib/common.sh` (paths, config, logging), `lib/host-macos.sh` (tools,
-  bridged networking, app bundle), `lib/vm.sh` (Lima), `lib/android.sh` (container, adb,
-  ATAK, window, position).
+- `takwerx`: the CLI. `lib/common.sh` (paths, config, logging, the APK lookup and picker),
+  `lib/host-macos.sh` (tools, bridged networking, the app bundle and Dock), `lib/emulator.sh`
+  (the emulator runtime: SDK download, AVD, the patched and bundled emulator binary,
+  provisioning, plugins), `lib/vm.sh` (Lima), `lib/android.sh` (container, adb, ATAK,
+  window, position).
 - `lima/takwerx.yaml.tmpl`: the VM. Its provisioning script installs podman, binder via
   binderfs, uhid, and three systemd services: `dev-binderfs.mount`, `takwerx-location`
   (NMEA feeder) and `takwerx-adb-relay`. Placeholders `@CPUS@` etc. make the template itself
@@ -35,6 +40,13 @@ does and `docs/DECISIONS.md` for every non-obvious finding and why; do not re-de
 - No code signing anywhere, by decision. The app bundle is generated on the user's Mac.
 - License AGPL-3.0-or-later. ATAK APKs are never committed or redistributed.
 
+- On the emulator runtime, provisioning runs on every boot (`emu_provision`), and the
+  emulator copy under `~/.takwerx/tools/emulator` is rebuilt whenever the revision tag in
+  `emu_prepare` changes. The emulator binary runs from inside the app in Applications.
+- Every mouse and trackpad fix is in the Cursorwerx plugin (takwerx/cursorwerx, in the
+  Market), never in the runtime.
+
 ## Not done
 
-Windows and Linux hosts. A scrcpy patch to turn trackpad scrolling into touch drags.
+Windows (see `docs/PLAN-windows.md`) and Linux hosts. A scrcpy patch to turn trackpad
+scrolling into touch drags, for the redroid runtime.
