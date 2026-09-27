@@ -2,6 +2,70 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-27: the first crash from the field is the "..." button. Qt's path file, the app bundle, and Chromium's sandbox
+
+A tester's Mac mini M4 Pro (24 GB), fresh install, 76 seconds after start: the whole
+emulator went down when they clicked "..." (Extended Controls) on the side toolbar. The
+crash report's main thread: `ToolWindow::on_more_button_clicked -> ExtendedWindow::show ->
+QWebEngineView::showEvent -> WebEngineContext::WebEngineContext ->
+WebEngineLibraryInfo::getPath -> QMessageLogger::fatal -> abort`. The Location page of that
+window is a Chromium view (Google Maps), created the first time the window shows.
+
+- **Reproduced here without a click.** macOS Accessibility blocks keystrokes from this
+  session (`osascript is not allowed to send keystrokes`), so the emulator was started with
+  `-grpc 8554` (now `EMU_ARGS` in the config, for trials only: that port is on every
+  interface, unauthenticated) and asked over its gRPC bridge,
+  `android.emulation.control.UiController/showExtendedControls`, with curl
+  (`--http2-prior-knowledge`, `content-type: application/grpc`, a 5-byte empty frame, or
+  `00 00 00 00 02 08 01` for the Location pane). The emulator routes Qt's messages through
+  its own handler into `emulator.log`, so the fatal text is there:
+  `The following paths were searched for Qt WebEngine Process:
+  /Applications/lib64/qt/libexec/QtWebEngineProcess, /Applications/lib64/qt/bin/...,
+  /Applications/TAKwerx ATAK Terminal.app/Contents/MacOS/QtWebEngineProcess`.
+- **Cause: Qt's path file, compiled into the binary, and where the binary runs from.**
+  qemu-system-aarch64 carries `:/qt/etc/qt.conf` as a Qt resource, 33 bytes,
+  `[Paths] Prefix = ../../lib64/qt`. Qt reads a compiled-in qt.conf before any other (one
+  in the app's Resources cannot override it, checked in Qt 6.5.3's qlibraryinfo.cpp) and
+  resolves a relative Prefix against the executable's directory, or, for an executable
+  inside an app bundle, against the bundle's `Contents/`. From `qemu/darwin-aarch64/`
+  that is the emulator's `lib64/qt`; from `TAKwerx ATAK Terminal.app/Contents/MacOS/` (the
+  Dock decision below, 2026-09-26) it is `/Applications/lib64/qt`. Nothing else the
+  emulator draws noticed: the launcher passes the plugin directory in
+  `QT_QPA_PLATFORM_PLUGIN_PATH`, which Qt also adds to its library paths, and the emulator
+  ships no Qt translations or QML imports. Only Qt WebEngine reads the prefix, for its
+  helper (`lib64/qt/libexec/QtWebEngineProcess`), its resources (`resources/*.pak`,
+  `icudtl.dat`) and locales. The tester's own Claude read of the crash had the symptom
+  right and the cause wrong: Qt's libraries loading from under the home folder is the
+  design; the executable's location is what moved.
+- **Qt's three environment overrides are not enough on their own.**
+  `QTWEBENGINEPROCESS_PATH`, `QTWEBENGINE_RESOURCES_PATH` and `QTWEBENGINE_LOCALES_PATH` in
+  the wrapper script stopped the abort, but the helper died the moment it started
+  (`icu_util.cc: Invalid file descriptor to ICU data received`,
+  `ContentMainDelegate::TerminateForFatalInitializationError`, two crash reports per
+  opening, a blank page). Chromium sandboxes the helper before it reads anything, and the
+  seatbelt profile in Qt's build allows reads under the app bundle, the helper's own
+  executable and `(subpath (param qt-prefix-path))`: Qt's prefix as the browser process
+  sees it, still `/Applications/lib64/qt`. So the prefix itself has to be right.
+- **The fix: the retitle pass takes the path file out of the copy.** One letter of the
+  resource's name in the resource table changes, `qt.conf` to `qt.conx` (UTF-16, the
+  stored hash stays and the lookup compares names, so `:/qt/etc/qt.conf` no longer
+  exists). Qt then looks in the app's Resources and next to the executable, finds nothing,
+  and uses its relocatable prefix, the directory QtCore was loaded from: `lib64/qt` of the
+  copy, the same answer the stock layout gives. Measured first with a 30-line C probe that
+  dlopens the emulator's QtCore and calls `QLibraryInfo::path` (LibraryExecutables,
+  Data, Translations all under `~/.takwerx/tools/emulator/lib64/qt`). Verified on the
+  built app: Extended Controls opens on the Location pane, two renderers stay up, Google
+  Maps' JavaScript loads (its own deprecation warnings arrive in `emulator.log`), no crash
+  report. The three variables stay in the wrapper as the second line for an emulator build
+  where the byte pattern does not match: no abort, a blank map, and `emu_prepare` warns.
+  Copy revision r12; `takwerx update` then a restart brings an installed Mac up to it.
+- **Not chosen.** `-no-location-ui` drops the pane (a real feature: a map to set a
+  position from). `QTWEBENGINE_DISABLE_SANDBOX=1` works by removing the sandbox. A qt.conf
+  in the app is read after the compiled-in one. Qt expands `$(VAR)` in qt.conf values, so
+  rewriting the 33-byte payload to `Prefix=$(X)` would also work, but only with the
+  variable set. `Prefix = Resources/qt` with a symlink out of the bundle keeps Qt happy
+  and the sandbox not: seatbelt matches real paths, and the files stay outside the bundle.
+
 ## 2026-09-26, late night: how it installs, decided
 
 The operator's call: no Apple Developer ID ("not paying Apple"), so no notarized

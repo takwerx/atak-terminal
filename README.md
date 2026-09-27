@@ -213,6 +213,8 @@ and it is the path for Intel Macs. Both keep their own Android data.
   is the emulator's own log. `takwerx logs --android` is logcat.
 - **ATAK stops responding.** `takwerx atak` restarts ATAK; `takwerx restart` restarts
   Android. Data is kept.
+- **The window vanished when you clicked "..." on its side toolbar.** Older installs did
+  that (the emulator's Extended Controls); `takwerx update`, then `takwerx restart`.
 - **ATAK asks for permissions anyway.** `takwerx apk` again re-grants everything.
 - **A plugin is installed but ATAK does not show it.** `takwerx plugin` on its APK
   again; it switches the plugin on in ATAK and restarts ATAK.
@@ -230,8 +232,9 @@ and it is the path for Intel Macs. Both keep their own Android data.
 - All downloads are pinned to specific versions and checksums in `versions.env`; the
   emulator and Android image come from Google's own repository.
 - The app in Applications is built on your Mac, not downloaded, and is not signed by
-  Apple. The emulator inside it is Google's binary, re-signed locally because two
-  strings in it are patched (the window title, and its own Dock icon).
+  Apple. The emulator inside it is Google's binary, re-signed locally because three
+  strings in it are patched (the window title, its own Dock icon, and the name of the
+  Qt path file it carries, which points at the wrong place from inside an app).
 
 ## Status
 

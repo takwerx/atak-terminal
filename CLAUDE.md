@@ -42,7 +42,11 @@ why; do not re-derive those. Windows is next: `docs/PLAN-windows.md` is the brie
 
 - On the emulator runtime, provisioning runs on every boot (`emu_provision`), and the
   emulator copy under `~/.takwerx/tools/emulator` is rebuilt whenever the revision tag in
-  `emu_prepare` changes. The emulator binary runs from inside the app in Applications.
+  `emu_prepare` changes. The emulator binary runs from inside the app in Applications,
+  which is why the copy has Qt's compiled-in qt.conf patched out and the wrapper script
+  sets Qt WebEngine's paths (DECISIONS 2026-09-27). To drive the emulator's own UI in a
+  test, `EMU_ARGS=-grpc 8554` in the config and curl to its UiController; keystrokes by
+  osascript are refused here.
 - Every mouse and trackpad fix is in the Cursorwerx plugin (takwerx/cursorwerx, in the
   Market), never in the runtime.
 

@@ -27,6 +27,10 @@ EMU_VK=$(config_get EMU_VK moltenvk)
 # takes the host's native swapchain out of the presentation path, the suspect for ATAK's
 # occasional "isn't responding" (DECISIONS 2026-09-26).
 EMU_FEATURES=$(config_get EMU_FEATURES "")
+# Extra emulator arguments, for trials only. "-grpc 8554" opens the emulator's gRPC bridge,
+# which is how Extended Controls is opened without a click (DECISIONS 2026-09-27). Never
+# set by default: -grpc listens on every interface, unauthenticated.
+EMU_ARGS=$(config_get EMU_ARGS "")
 # Google apps the image ships that the terminal has no use for. Off at provisioning, so
 # they neither sit in memory nor fill the dock; Chrome stays. Override in the config to
 # keep some, or set it empty to keep them all. Play services is in the list: its location
@@ -136,7 +140,7 @@ emu_prepare() {
     *) die "EMU_VK must be moltenvk or kosmickrisp (is '$EMU_VK')" ;;
   esac
   # The trailing tag is this function's own revision: bump it when the copy is built differently.
-  want="emulator $EMULATOR_VERSION, moltenvk $MOLTENVK_VERSION, r11"
+  want="emulator $EMULATOR_VERSION, moltenvk $MOLTENVK_VERSION, r12"
   if [ "$(tool_version "$EMU_DIR")" != "$want" ]; then
     step "Preparing the GPU emulator ($want)"
     rm -rf "$EMU_DIR"
@@ -166,6 +170,19 @@ emu_prepare() {
 # for ATAK's art itself (7.5 KB for 256 px). Misspelling the Qt resource name
 # :/all/android_studio_icon, tried first, changed nothing: that is a different picture
 # (2026-09-26).
+# The same pass takes Qt's own path file out of the binary. A qt.conf is compiled in as
+# a Qt resource, "Prefix = ../../lib64/qt": relative to the executable's directory, or
+# to Contents/ for an executable inside an app, so from the app it names
+# /Applications/lib64/qt. Nothing the emulator draws reads it (the launcher hands Qt its
+# plugin directory), but the Location page of Extended Controls, the "..." button, is a
+# Chromium view: it looked under that prefix for its helper process, found nothing and
+# aborted the whole emulator, the first crash reported from the field; and its sandbox
+# lets the helper read files only under that prefix, so pointing the helper elsewhere is
+# not enough. One letter of the resource's name is changed (qt.conf to qt.conx): Qt then
+# finds no qt.conf and does what it does everywhere else, takes the directory QtCore was
+# loaded from, lib64/qt in the copy, the same answer the stock layout gives. Checked
+# after signing; without it the emulator still runs, and the map stays blank
+# (DECISIONS 2026-09-27).
 emu_retitle() {
   local bin="$EMU_DIR/qemu/darwin-aarch64/qemu-system-aarch64" ent="$TAKWERX_STATE/emulator.entitlements"
   codesign -d --entitlements :- "$bin" >"$ent" 2>/dev/null && [ -s "$ent" ] || { warn "Could not read the emulator's entitlements; keeping its title"; return 0; }
@@ -173,12 +190,15 @@ emu_retitle() {
   perl -0777 -pi -e 's/%s Emulator - %s:%d\x00%s: %dx%d\n\x00/TAKwerx ATAK Terminal\x00: %dx%d\n\x00/;
     s/\x89(PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x20\x00\x00\x00\x20)/\x00$1/;
     s/\x89(PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x80\x00\x00\x00\x80)/\x00$1/;
-    s/\x89(PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x01\x00\x00\x00\x01\x00)/\x00$1/' "$bin"
+    s/\x89(PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x01\x00\x00\x00\x01\x00)/\x00$1/;
+    s/(\x00\x07.{4}\x00q\x00t\x00\.\x00c\x00o\x00n\x00)f/${1}x/s' "$bin"
   if cmp -s "$bin" "$bin.orig" || ! codesign --force --sign - --options runtime --entitlements "$ent" "$bin" >/dev/null 2>&1; then
     warn "Could not retitle the emulator window; keeping its title"
     mv -f "$bin.orig" "$bin"; return 0
   fi
   rm -f "$bin.orig"
+  perl -0777 -ne 'exit(index($_, "\x00q\x00t\x00.\x00c\x00o\x00n\x00x") < 0)' "$bin" \
+    || warn "Could not take Qt's path file out of the emulator; the map in Extended Controls will be blank"
 }
 
 # macOS names a running program after its app bundle, or after the executable file when
@@ -193,6 +213,12 @@ emu_retitle() {
 # from the launcher directory; without it dyld cannot find libandroid-emu-tracing. The
 # retitled, signed binary stays in the copy as qemu-system-aarch64.bin, so the app can be
 # rebuilt from it at any time (emu_start checks).
+# The script also tells Qt WebEngine where its helper process and resources are, in Qt's
+# own three variables. With Qt's path file taken out of the binary (emu_retitle) Qt works
+# that out itself; these are the second line of defence for a build where that patch does
+# not apply: the emulator then does not abort on the "..." button, only the map stays
+# blank. A qt.conf in the app cannot do this: the compiled-in one is read first
+# (DECISIONS 2026-09-27).
 emu_bundle() {
   local dir="$EMU_DIR/qemu/darwin-aarch64" bin mac="$APP_DIR/Contents/MacOS"
   bin="$dir/qemu-system-aarch64"
@@ -211,6 +237,12 @@ emu_bundle() {
 # binaries), so it is set again here from the launcher directory.
 E=\${ANDROID_EMULATOR_LAUNCHER_DIR:-\$(cd "\$(dirname "\$0")/../.." && pwd)}
 export DYLD_LIBRARY_PATH="\$E/lib64/qt/lib:\$E/lib64/vulkan:\$E/lib64/gles_angle:\$E/lib64"
+# Where Qt WebEngine (the Location page of Extended Controls) finds its helper process
+# and resources, should Qt's own prefix be wrong from inside the app; without them Qt
+# would look in /Applications/lib64/qt and abort the emulator.
+export QTWEBENGINEPROCESS_PATH="\$E/lib64/qt/libexec/QtWebEngineProcess"
+export QTWEBENGINE_RESOURCES_PATH="\$E/lib64/qt/resources"
+export QTWEBENGINE_LOCALES_PATH="\$E/lib64/qt/translations/qtwebengine_locales"
 exec "$mac/qemu-system-aarch64" "\$@"
 WRAP
   chmod +x "$bin"
@@ -373,10 +405,11 @@ emu_start() {
   rm -f "$EMU_AVD_HOME/$EMU_AVD.avd/"*.lock
   emu_configure_avd
   step "Starting Android on the GPU ($EMU_AVD, $(emu_geometry | awk '{print $1"x"$2" at "$3" dpi"}'))"
-  log "emulator start: $(tool_version "$EMU_DIR")${EMU_FEATURES:+, features $EMU_FEATURES}"
+  log "emulator start: $(tool_version "$EMU_DIR")${EMU_FEATURES:+, features $EMU_FEATURES}${EMU_ARGS:+, args $EMU_ARGS}"
+  # shellcheck disable=SC2086  # EMU_ARGS is a list of arguments
   ANDROID_SDK_ROOT="$EMU_SDK" ANDROID_HOME="$EMU_SDK" ANDROID_AVD_HOME="$EMU_AVD_HOME" ANDROID_EMU_VK_SELECT_ICD="$EMU_VK" \
     nohup "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu host \
-      -feature "Vulkan,GuestAngle,VirtioTablet${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim \
+      -feature "Vulkan,GuestAngle,VirtioTablet${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim $EMU_ARGS \
       >>"$EMU_LOG" 2>&1 </dev/null &
   disown 2>/dev/null || true
 }
