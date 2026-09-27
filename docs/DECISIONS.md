@@ -2,6 +2,29 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-26, late: the runtime installs itself. Proven in an empty root on this Mac
+
+`takwerx init` now fetches Google's emulator (37.1.11, build 15917651) and the Android 14
+google_apis arm64 image (r14) from `dl.google.com/android/repository` at the sha1s the
+repository XML publishes, and MoltenVK 1.4.2 from its GitHub release, writes the AVD by
+hand (no Java, no avdmanager), and asks once for Google's SDK licence. Tested with
+`TAKWERX_ROOT=~/takwerx-fresh`: 37 s from cached archives to a booted Android 14 on the
+GPU, ATAK installed, every provisioning step applied, first-run EULA over the TAKwerx
+splash. Found only on a fresh device:
+
+- **The emulator refuses an SDK root with no `platform-tools` directory** ("Broken AVD
+  system path"). It wants adb there; a symlink to scrcpy's adb satisfies it.
+- **`have=$(adb_sh md5sum missing-file | cut ...)` ends `takwerx up` under `set -e`**: a
+  failing command substitution in an assignment is fatal, and the splash file does not
+  exist yet on a fresh device. `|| true`.
+- **First boot of the image takes ~25 s**, not minutes; the encrypted userdata is created
+  from the image's on the fly.
+- **The emulator is the default runtime on Apple Silicon** (`RUNTIME_DEFAULT`): no VM, no
+  admin password, no Homebrew. redroid remains for other hosts and multicast.
+- Not exercised end to end here: `takwerx init` itself with `app_build` and `path_setup`,
+  because on this Mac they would repoint the bench's app icon and PATH. The MacBook is the
+  first full run.
+
 ## 2026-09-26, night: the GPU emulator is a takwerx runtime. Every setting below was measured
 
 The product is **TAKwerx ATAK Terminal**. `takwerx runtime emulator`, then `takwerx up|down|restart` and the ATAK icon work as before;
