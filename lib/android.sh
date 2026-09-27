@@ -296,7 +296,9 @@ atak_splash_apply() {
     rm -f "$out.tmp"
   fi
   want=$(md5 -q "$out" 2>/dev/null || md5sum "$out" | cut -d' ' -f1)
-  have=$(adb_sh md5sum /sdcard/atak/support/atak_splash.png 2>/dev/null | cut -d' ' -f1)
+  # No file yet on a fresh device: md5sum fails, and under set -e a failing substitution
+  # ends the whole command. Hence the || true (it did end `takwerx up`, 2026-09-26).
+  have=$(adb_sh md5sum /sdcard/atak/support/atak_splash.png 2>/dev/null | cut -d' ' -f1 || true)
   [ "$want" = "$have" ] && return 0
   adb_sh mkdir -p /sdcard/atak/support >/dev/null 2>&1 || true
   adb_ push "$out" /sdcard/atak/support/atak_splash.png >/dev/null 2>&1 || warn "Could not install the splash screen"

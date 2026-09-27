@@ -37,6 +37,10 @@ case "$(uname -m)" in
   x86_64)        HOST_ARCH=x86_64; SCRCPY_ARCH=x86_64 ;;
   *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
+# The runtime a fresh install gets: the Android Emulator on the GPU on Apple Silicon (fast,
+# full-size icons, no VM, no admin password); redroid in the VM elsewhere, until the
+# emulator path is built for those hosts. `takwerx runtime` switches.
+if [ "$HOST_OS" = macos ] && [ "$HOST_ARCH" = arm64 ]; then RUNTIME_DEFAULT=emulator; else RUNTIME_DEFAULT=redroid; fi
 
 if [ -t 1 ]; then
   BOLD=$'\033[1m'; RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[0;33m'; DIM=$'\033[2m'; NC=$'\033[0m'

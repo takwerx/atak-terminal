@@ -29,7 +29,8 @@ usage() {
   cat <<USAGE
 takwerx $TAKWERX_VERSION: ATAK on your desktop
 
-  takwerx init [--apk FILE] [--no-bridged] [--no-up]   install everything, then open ATAK
+  takwerx init [--apk FILE] [--runtime emulator|redroid] [--no-bridged] [--no-up]
+                                                       install everything, then open ATAK
   takwerx up [--no-window]                             start Android and open the ATAK window
   takwerx down                                         stop Android and the VM, keep all data
   takwerx restart                                      recreate Android (keeps data) and reopen the window
@@ -57,7 +58,7 @@ USAGE
 }
 
 require_installed() {
-  [ "$(runtime)" = emulator ] && return 0
+  if [ "$(runtime)" = emulator ]; then emu_installed || die "Not installed yet. Run: takwerx init"; return 0; fi
   [ -x "$LIMACTL" ] || die "Not installed yet. Run: takwerx init"
   vm_exists || die "No VM yet. Run: takwerx init"
 }
@@ -95,10 +96,11 @@ market_install() {
 }
 
 cmd_init() {
-  local apk='' bridged=1 open=1 a pos lat lon acc
+  local apk='' bridged=1 open=1 rt='' a pos lat lon acc
   while [ $# -gt 0 ]; do
     case "$1" in
       --apk) apk=$2; shift ;;
+      --runtime) rt=$2; shift ;;
       --no-bridged) bridged=0 ;;
       --no-up) open=0 ;;
       *) die "Unknown option: $1" ;;
@@ -109,6 +111,12 @@ cmd_init() {
   host_check
   host_tools_install
   path_setup
+  case "$rt" in
+    "") ;;
+    emulator|redroid) config_set RUNTIME "$rt" ;;
+    *) die "--runtime must be emulator or redroid" ;;
+  esac
+  if [ "$(runtime)" = emulator ]; then init_emulator "$apk" "$open"; return; fi
   vm_defaults
   if [ "$bridged" = 1 ] && [ "$(config_get NETWORK_MODE nat)" != bridged ]; then
     bridged_setup || config_set NETWORK_MODE nat
@@ -137,6 +145,26 @@ cmd_init() {
       warn "No position set; run 'takwerx location here' or 'takwerx location LAT,LON' so ATAK has a self marker"
     fi
   fi
+  if ! atak_installed; then
+    printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ then run:\n  takwerx apk ~/Downloads/ATAK-CIV-x.y.z.apk\n' "$BOLD" "$NC"
+  fi
+  printf '\n%sDone.%s %s.app is in %s; new terminals have the takwerx command.\n' "$GREEN" "$NC" "$APP_NAME" "$(dirname "$APP_DIR")"
+  if [ "$open" = 1 ]; then cmd_up; fi
+}
+
+# The GPU runtime: no VM, no admin password. Google's licence, about 2 GB of downloads,
+# the device, first boot, then ATAK.
+init_emulator() {
+  local apk=$1 open=$2 a
+  emu_sdk_install
+  app_build
+  emu_up
+  if [ -z "$apk" ] && ! atak_installed; then
+    a=$(find_atak_apk)
+    if [ -n "$a" ] && confirm "Found $(basename "$a") in Downloads. Install it?"; then apk=$a; fi
+  fi
+  if [ -n "$apk" ]; then atak_install "$apk"; market_install; fi
+  location_refresh
   if ! atak_installed; then
     printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ then run:\n  takwerx apk ~/Downloads/ATAK-CIV-x.y.z.apk\n' "$BOLD" "$NC"
   fi
@@ -195,7 +223,11 @@ cmd_apk() {
   say "Run 'takwerx up' to open it."
 }
 
-cmd_plugin()      { [ -n "${1:-}" ] || die "Usage: takwerx plugin FILE.apk"; android_up; plugin_install "$1"; }
+cmd_plugin() {
+  [ -n "${1:-}" ] || die "Usage: takwerx plugin FILE.apk"
+  android_up; plugin_install "$1"
+  if [ "$(runtime)" = emulator ]; then emu_plugins_enable; fi
+}
 cmd_market()      { android_up; market_install; }
 cmd_datapackage() { [ -n "${1:-}" ] || die "Usage: takwerx datapackage FILE.zip"; android_up; datapackage_install "$1"; }
 cmd_display() {
