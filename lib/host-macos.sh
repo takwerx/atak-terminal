@@ -15,6 +15,11 @@ host_check() {
   local ver major
   ver=$(sw_vers -productVersion); major=${ver%%.*}
   if [ "$major" -lt 13 ]; then die "macOS 13 or newer is required (this Mac runs $ver)"; fi
+  # Downloaded as a ZIP from GitHub in a browser, every file carries the quarantine flag and
+  # macOS refuses to run the maclocation helper. The curl one-liner never sets the flag; a
+  # browser download does. Cleared here, on takwerx's own files only.
+  xattr -dr com.apple.quarantine "$TAKWERX_APP" 2>/dev/null || true
+  chmod +x "$TAKWERX_APP/takwerx" "$TAKWERX_APP/helpers/maclocation/maclocation" 2>/dev/null || true
   ok "macOS $ver, $HOST_ARCH"
 }
 
