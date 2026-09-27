@@ -45,6 +45,17 @@ the compromise.
   `lib64`). Signing: the app is signed ad hoc without `--deep`, each helper on its own
   and the emulator copy with its original entitlements (`app_sign`), because a deep
   signature would strip the hypervisor entitlement and the emulator would not start.
+  Two more things measured on the way: (1) with all that in place the Dock tile still
+  showed the emulator's own picture, Android on a device, because the emulator calls
+  Qt's `setWindowIcon`, which on macOS sets the Dock tile at run time over the bundle's
+  icon; the picture is two PNGs (256 and 128 px) in the binary, too small a slot for
+  ATAK's art, so the retitle pass misspells the resource name `:/all/android_studio_icon`
+  by one character instead, the QIcon comes back null, Qt sets nothing, and the Dock
+  keeps the app's icon. (2) `app_dock_add` pinned the app again on every build, four
+  tiles on the MacBook, because the Dock stores the path URL-encoded (`%20`) and the
+  check looked for the plain path; it now walks the tiles by index through
+  `defaults export`, PlistBuddy and `defaults import`, removes every TAKwerx tile and
+  appends one, with `tile-type = file-tile` so it recognises its own tile next time.
 
 ## 2026-09-26, laptop night: what the MacBook found that the Studio had not
 

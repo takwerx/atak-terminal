@@ -228,12 +228,33 @@ app_icon() {
   iconutil -c icns "$work/icon.iconset" -o "$out" 2>/dev/null || warn "iconutil failed; default icon kept"
 }
 
-# Pins the app to the Dock once. The Dock restarts to pick it up (a second of blank Dock).
+# Pins the app to the Dock once. The Dock stores the path URL-encoded (spaces as %20);
+# an earlier check looked for the plain path, never matched, and pinned the app again on
+# every build, so any duplicates are removed first, then one tile is appended. Edits go
+# through defaults export/import (PlistBuddy on the live plist is overwritten by
+# cfprefsd). The Dock restarts to pick it up (a second of blank Dock).
 app_dock_add() {
-  defaults read com.apple.dock persistent-apps 2>/dev/null | grep -q "$APP_DIR" && return 0
-  defaults write com.apple.dock persistent-apps -array-add "<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>file://$APP_DIR/</string><key>_CFURLStringType</key><integer>15</integer></dict></dict></dict>" >/dev/null 2>&1 || return 0
+  local url="file://${APP_DIR// /%20}/" plist="$TAKWERX_STATE/dock.plist" i=0 u had=0 n
+  defaults export com.apple.dock "$plist" 2>/dev/null || return 0
+  while /usr/libexec/PlistBuddy -c "Print :persistent-apps:$i" "$plist" >/dev/null 2>&1; do i=$((i + 1)); done
+  n=$i
+  i=$((n - 1))
+  while [ "$i" -ge 0 ]; do
+    u=$(/usr/libexec/PlistBuddy -c "Print :persistent-apps:$i:tile-data:file-data:_CFURLString" "$plist" 2>/dev/null || true)
+    case "$u" in
+      *TAKwerx%20ATAK%20Terminal.app*) /usr/libexec/PlistBuddy -c "Delete :persistent-apps:$i" "$plist" >/dev/null 2>&1; had=$((had + 1)) ;;
+    esac
+    i=$((i - 1))
+  done
+  [ "$had" -eq 1 ] && { rm -f "$plist"; return 0; }
+  i=$((n - had))   # appended at the end of the Dock
+  /usr/libexec/PlistBuddy -c "Add :persistent-apps:$i dict" -c "Add :persistent-apps:$i:tile-type string file-tile" \
+    -c "Add :persistent-apps:$i:tile-data dict" -c "Add :persistent-apps:$i:tile-data:file-data dict" \
+    -c "Add :persistent-apps:$i:tile-data:file-data:_CFURLString string $url" -c "Add :persistent-apps:$i:tile-data:file-data:_CFURLStringType integer 15" "$plist" >/dev/null 2>&1 || { rm -f "$plist"; return 0; }
+  defaults import com.apple.dock "$plist" 2>/dev/null || { rm -f "$plist"; return 0; }
+  rm -f "$plist"
   killall Dock >/dev/null 2>&1 || true
-  ok "$APP_NAME is in the Dock"
+  if [ "$had" -gt 1 ]; then ok "$APP_NAME is in the Dock once (was $had times)"; else ok "$APP_NAME is in the Dock"; fi
 }
 
 app_remove() { rm -rf "$APP_DIR"; }

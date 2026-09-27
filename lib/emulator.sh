@@ -136,7 +136,7 @@ emu_prepare() {
     *) die "EMU_VK must be moltenvk or kosmickrisp (is '$EMU_VK')" ;;
   esac
   # The trailing tag is this function's own revision: bump it when the copy is built differently.
-  want="emulator $EMULATOR_VERSION, moltenvk $MOLTENVK_VERSION, r9"
+  want="emulator $EMULATOR_VERSION, moltenvk $MOLTENVK_VERSION, r10"
   if [ "$(tool_version "$EMU_DIR")" != "$want" ]; then
     step "Preparing the GPU emulator ($want)"
     rm -rf "$EMU_DIR"
@@ -157,11 +157,15 @@ emu_prepare() {
 # hypervisor, and library validation off, which is also what lets it load the swapped
 # drivers). macOS then sees a new app and may ask once for Local Network access. A failed
 # patch leaves the stock title, nothing worse.
+# The same pass blanks the name of the emulator's own Dock icon: Qt's setWindowIcon sets
+# the Dock tile at run time (the Android-on-a-device picture, 256 and 128 px PNGs in the
+# binary), over the app's icon. With the resource name misspelt by one character the
+# QIcon is null, Qt sets no icon, and the Dock shows the app's, ATAK's (2026-09-26).
 emu_retitle() {
   local bin="$EMU_DIR/qemu/darwin-aarch64/qemu-system-aarch64" ent="$TAKWERX_STATE/emulator.entitlements"
   codesign -d --entitlements :- "$bin" >"$ent" 2>/dev/null && [ -s "$ent" ] || { warn "Could not read the emulator's entitlements; keeping its title"; return 0; }
   cp -p "$bin" "$bin.orig"
-  perl -0777 -pi -e 's/%s Emulator - %s:%d\x00%s: %dx%d\n\x00/TAKwerx ATAK Terminal\x00: %dx%d\n\x00/' "$bin"
+  perl -0777 -pi -e 's/%s Emulator - %s:%d\x00%s: %dx%d\n\x00/TAKwerx ATAK Terminal\x00: %dx%d\n\x00/; s|:/all/android_studio_icon|:/all/android_studio_ic0n|g' "$bin"
   if cmp -s "$bin" "$bin.orig" || ! codesign --force --sign - --options runtime --entitlements "$ent" "$bin" >/dev/null 2>&1; then
     warn "Could not retitle the emulator window; keeping its title"
     mv -f "$bin.orig" "$bin"; return 0
