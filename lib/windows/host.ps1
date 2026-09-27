@@ -42,9 +42,11 @@ function Test-HostWindows {
 function Set-TakwerxPath {
     $cmd = Join-Path $Bin 'takwerx.cmd'
     $script = Join-Path $Root 'app\takwerx.ps1'
+    # One line that runs and exits: cmd reads a batch file as it goes, and `takwerx uninstall`
+    # deletes this file under it ("The system cannot find the path specified").
     Set-Content -Path $cmd -Encoding ASCII -Value @(
         '@echo off',
-        ('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{0}" %*' -f $script)
+        ('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{0}" %* & exit /b' -f $script)
     )
     $user = [Environment]::GetEnvironmentVariable('Path', 'User')
     if (-not $user) { $user = '' }
