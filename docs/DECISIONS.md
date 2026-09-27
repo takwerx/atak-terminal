@@ -37,8 +37,10 @@ desktop shortcuts. Measured and decided on the way:
   reinstalled the Market 18 s after ATAK's first launch, while logcat still said "eula has
   not been accepted", and ATAK never asked to load it (the operator loaded it by hand). It
   waited only for ATAK's preferences file, which exists from the first launch. It now waits
-  for `AgreedToEULA` = true in that file (ATAK's `EulaHelper`), on both engines. Not yet
-  re-measured on a fresh install.
+  for `AgreedToEULA` = true in that file (ATAK's `EulaHelper`), on both engines.
+  Re-measured on a fresh install: `takwerx uninstall` on the Dell, then the install line,
+  ATAK 5.8 from Downloads, its EULA and first-start screens, and ATAK asked to load the
+  Market by itself. The operator: "perfect end to end".
 - **ATAK updated from 5.7 to 5.8 through the Market, inside the Windows engine.** Official
   ATAK-CIV 5.7.0.3 on the Dell, the Market's two-step handoff (its own 5.8 build first, then
   ATAK through Android's installer, two prompts): ATAK came back on 5.8 with the Market
