@@ -175,12 +175,20 @@ emu_geometry() {
 # and cores from the host. No Java, so no avdmanager. The emulator makes the data and cache
 # images itself from the system image on first boot. No SD card: ATAK's /sdcard is the
 # emulated storage on the data partition.
+# Guest RAM and cores. A third of the Mac's memory, 4 to 8 GiB: at a quarter, a 16 GiB
+# MacBook gave Android 4 GiB, which sat at 500 MiB free with swap in use once ATAK and
+# the Google apps were up, and the display stack restarted under it (2026-09-26). Cores
+# half the host's, 2 to 4. Re-applied to an existing AVD on every start (emu_configure_avd)
+# so an older install picks the numbers up.
+emu_sizing() {
+  echo "$(clamp $(( $(host_mem_gb) * 1024 / 3 )) 4096 8192) $(clamp $(( $(host_cpus) / 2 )) 2 4)"
+}
+
 emu_avd_create() {
   local dir="$EMU_AVD_HOME/$EMU_AVD.avd" ram cores
   [ -f "$dir/config.ini" ] && return 0
   step "Creating the Android device ($EMU_AVD)"
-  ram=$(clamp $(( $(host_mem_gb) * 1024 / 4 )) 3072 6144)
-  cores=$(clamp $(( $(host_cpus) / 2 )) 2 4)
+  read -r ram cores <<<"$(emu_sizing)"
   mkdir -p "$dir"
   cat >"$EMU_AVD_HOME/$EMU_AVD.ini" <<INI
 avd.ini.encoding=UTF-8
@@ -246,12 +254,14 @@ INI
 # the two, and 150 against 200 is what redroid runs at (DECISIONS 2026-09-26). Every existing
 # hw.lcd line goes first; appended duplicates are otherwise read last-wins.
 emu_configure_avd() {
-  local ini="$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" w h dpi
+  local ini="$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" w h dpi ram cores
   [ -f "$ini" ] || die "No AVD named $EMU_AVD (expected $ini)"
   read -r w h dpi <<<"$(emu_geometry)"
-  { grep -vE '^hw\.lcd\.(width|height|density)[[:space:]]*=' "$ini"
-    printf 'hw.lcd.width=%s\nhw.lcd.height=%s\nhw.lcd.density=%s\n' "$w" "$h" $(( dpi * 3 / 4 )); } >"$ini.tmp" && mv "$ini.tmp" "$ini"
-  log "emulator screen ${w}x${h}, ui dpi $dpi"
+  read -r ram cores <<<"$(emu_sizing)"
+  { grep -vE '^(hw\.lcd\.(width|height|density)|hw\.ramSize|hw\.cpu\.ncore)[[:space:]]*=' "$ini"
+    printf 'hw.lcd.width=%s\nhw.lcd.height=%s\nhw.lcd.density=%s\nhw.ramSize=%s\nhw.cpu.ncore=%s\n' \
+      "$w" "$h" $(( dpi * 3 / 4 )) "$ram" "$cores"; } >"$ini.tmp" && mv "$ini.tmp" "$ini"
+  log "emulator screen ${w}x${h}, ui dpi $dpi, ${ram} MiB, ${cores} cores"
 }
 
 emu_pid()     { pgrep -f "qemu-system-aarch64 -avd $EMU_AVD " | head -n1; }
@@ -318,7 +328,14 @@ emu_provision() {
   # Android in dark mode. Since Android 12 a toast's text colour comes from the app's
   # theme (ATAK's is dark: white text) and its pill from the system's (light by default:
   # a white pill). White on white, unreadable. ATAK itself looks the same either way.
-  adb_sh cmd uimode night yes >/dev/null 2>&1 || true
+  # Dark mode, so ATAK's toasts are readable (the light toast draws white on white).
+  # SystemUI keeps the theme it started with for the toasts it renders: after the
+  # switch, toasts came up as an empty pill until SystemUI restarted (2026-09-26).
+  # Only the first provisioning switches; later boots start in dark mode.
+  if ! adb_sh cmd uimode night 2>/dev/null | grep -q "yes"; then
+    adb_sh cmd uimode night yes >/dev/null 2>&1 || true
+    sleep 2; adb_sh pkill -f com.android.systemui >/dev/null 2>&1 || true
+  fi
   tz=$(host_timezone)
   if [ -n "$tz" ]; then adb_sh setprop persist.sys.timezone "$tz" >/dev/null 2>&1 || true; fi
   read -r w h dpi <<<"$(emu_geometry)"

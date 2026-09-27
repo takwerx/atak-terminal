@@ -2,6 +2,50 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-26, laptop night: what the MacBook found that the Studio had not
+
+First full run on a 16 GiB M2 Pro MacBook Pro (2864x1838 at 400 dpi). Everything below
+was measured there over SSH while the operator used it.
+
+- **A 4 GiB guest is starved.** At a quarter of host memory the MacBook's Android had
+  4096 MiB: 526 MiB free and swap in use with ATAK and the stock Google apps up, then
+  `am_low_memory`, and at 21:40 the display stack restarted (init sent SIGTERM to the
+  gralloc, camera and GNSS HALs and killed surfaceflinger, taking zygote and ATAK with
+  it), a few seconds after SystemUI's ANGLE logged `createPipeline` failing with
+  `VK_ERROR_INITIALIZATION_FAILED` (-3). Guest RAM is now a third of the host, 4 to
+  8 GiB, and takwerx re-applies the sizing to an existing AVD on every start.
+- **Google tiles slow to fill on the MacBook: not the network.** Measured from inside
+  the guest against the host clock: ten TCP connects to Google's tile host in 0.11 s,
+  ten to the host loopback in the same, and the host itself fetches a tile in 0.13 s.
+  `time nc` inside the guest reads ~0.9 s per fetch only because nc waits for the
+  server's close; ignore it. The guest clock is fine (`sleep 1` measures 1.03 s), but
+  ping's rtt prints garbage through slirp (every reply arrives as seq 0) and a `ping -c3`
+  never ends: never wait on it. IPv6 in the guest is dead (100% loss to 2001:4860::8888
+  though the host has IPv6), but netstat showed only IPv4 sockets to Google, so nothing
+  waits on it. The tile stalls line up with the memory starvation above (`Long monitor
+  contention` of 100 to 460 ms on the tile cache while the guest swapped); verify after
+  the RAM change before looking further.
+- **Toasts as an empty pill: SystemUI's theme, not ATAK's.** ATAK targets API 35, so
+  its toasts are text toasts drawn by SystemUI. SystemUI keeps the theme it started
+  with: `cmd uimode night yes` applied after boot left the toast pill and text in
+  mismatched modes until SystemUI restarted (after the display-stack restart the same
+  toast, "Auto Map Select On", drew correctly: dark pill, white text, ATAK icon).
+  Provisioning now restarts SystemUI when it switches the mode; later boots start dark.
+- **Esri's sign-in page in a WebView ignored every click.** Cursorwerx re-issues the
+  emulator's tablet presses as touchscreen-sourced events with the mouse tool type, which
+  is what an EditText needs to focus; a WebView (Chromium) drops that combination
+  (`handled=false`). Cursorwerx now hit-tests on DOWN, looking through its own pointer
+  shroud, and sends a press over a WebView as a finger. Sign-in and "Show password" work.
+- **Play services floods the system log.** `AppOps: Could not forward noteOp of 108
+  (FINE_LOCATION_SOURCE) to com.google.android.gms/fused_location_provider`, a 15-line
+  stack trace up to 300 times a second, on both Macs, whenever GMS's process holding the
+  async-noted callback has died. `am force-stop com.google.android.gms` silences it for
+  minutes only; `appops set ... FINE_LOCATION_SOURCE ignore` does not take. Not fixed;
+  the log buffer is 32 MiB now so it no longer hides everything else. A candidate is
+  disabling the Google apps ATAK does not need, which also frees guest memory.
+- **A crash-restart of ATAK does not ask "load plugins?" here**: after the display stack
+  restart, `am start` brought ATAK back with every plugin loaded and no dialog.
+
 ## 2026-09-26, late: the runtime installs itself. Proven in an empty root on this Mac
 
 `takwerx init` now fetches Google's emulator (37.1.11, build 15917651) and the Android 14
