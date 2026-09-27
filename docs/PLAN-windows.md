@@ -42,6 +42,11 @@ and the x86-64 image there, from the same Google repository XML).
 
 ## Genuinely new, and measured first
 
+Status 2026-09-27: 1 and 2 measured on a Dell with NVIDIA (DECISIONS 2026-09-27,
+afternoon): WHPX usable without admin there, guest ANGLE at about 50 fps, full-size icons.
+The Intel GPU, a machine without WHPX, and 3 (the mouse) are still open.
+`tools/windows-measure.ps1` does the measuring.
+
 Before porting anything, on the Windows machine, by hand, in this order:
 
 1. The hypervisor. WHPX (Windows Hypervisor Platform, an optional feature) or Google's

@@ -2,6 +2,53 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-27, afternoon: Windows measured first. WHPX without admin, ANGLE at 50 fps, the stock path at 16
+
+The measure-first phase of `docs/PLAN-windows.md`, on the operator's work laptop: Dell
+Precision 5490, Core Ultra 7 165H, 32 GB, NVIDIA RTX 2000 Ada (driver 596.71) beside Intel
+Arc Pro, Windows 11 Pro 26200, 1920x1200 at 125%. A managed machine: the operator is not a
+local administrator, so no SSH server could be installed, and the work ran as
+`tools/windows-measure.ps1`, typed by hand, fetching itself and ATAK from the Mac over a
+switch and posting its results back to `tools/measure-server.py`. What it found:
+
+- **The hypervisor needs nothing on a machine like this.** Virtualization-based security was
+  running, so Windows' own hypervisor was up, and `emulator -accel-check` said `WHPX(10.0.26200)
+  is installed and usable` as a plain user. The emulator runs without admin. A machine without
+  WHPX needs it switched on once, by an admin; not met yet.
+- **The stock path (`-gpu host`, the emulator's GLES translator on NVIDIA OpenGL 4.5)** draws
+  ATAK's icons and labels at full size, so the 64 px cap was Apple's OpenGL, not the emulator.
+  But it ran at 16 fps under the scripted drags below. ATAK did not stay up on it without
+  `opengl.broken` (splash, then black; not running 20 s after launch), the same as the Mac's
+  first GPU run; with the file it started.
+- **Guest ANGLE (`-feature Vulkan,GuestAngle`) on NVIDIA's Vulkan: 48-51 fps** in the measured
+  windows, SurfaceFlinger's own average 55-57, renderer `ANGLE (NVIDIA, Vulkan 1.3.0 ...
+  NVIDIA-596.71.0.0), OpenGL ES 3.2.0`. The Mac under the identical test: 57.4-57.6 (average
+  59.3) on ANGLE over MoltenVK. ATAK started on ANGLE without the Mac's
+  `warmUpPipelineCacheAtLink` override: that one was MoltenVK's. `opengl.broken` was in place;
+  ANGLE without it is untested. Boot to Android 32 s on ANGLE, 43-50 s on the stock path.
+  So Windows takes the Mac's recipe minus the override: `-gpu host -feature
+  Vulkan,GuestAngle,VirtioTablet`.
+- **How the frame rate is measured**, the same on both machines: SurfaceFlinger timestats
+  (`dumpsys SurfaceFlinger --timestats -enable`, `-clear`, `-dump`), `totalFrames` of ATAK's
+  map layer, `SurfaceView[...ATAKActivityCiv](BLAST)`, over three windows of three 3-second
+  `input swipe` drags each. `dumpsys SurfaceFlinger --latency` returned nothing on this
+  Android 14 image for any layer, and short swipes left the map idle between them (15 fps on
+  the stock path by that method, 16 with long drags).
+- **Windows traps for the port**, each hit today: `Expand-Archive` fails on the 1.5 GB image
+  zip ("A local file header is corrupt"), `tar.exe` unpacks it; `Invoke-WebRequest` on the
+  420 MB emulator zip crawls with its progress bar (use `curl.exe`); the emulator's `*.lock`
+  entries are directories on Windows; a PowerShell function with a `param()` block binds
+  `-W`, `-d` and `-c` meant for adb as its own switches; the emulator starts at its factory
+  position (San Francisco) until `adb emu geo fix`, as on the Mac.
+- **Plugins**: installed through the Market inside ATAK they get `shouldLoad=false` and
+  wait in the Plugins screen, as on the Mac; switching all nine on and restarting ATAK loaded
+  them. Map Depot's entry then came and went from the Tools list while ATAK's registry kept
+  it loaded (`Already loaded, skipping plugin extension ... MapDepot`), and ATAK never
+  restarted: a Map Depot bug, seen on the Mac too, not the runtime's.
+- **Open:** the Intel Arc on ANGLE (Windows gave the emulator the NVIDIA by default); the
+  operator finds the dynamic range-and-bearing endpoint drag worse than on the Mac, a
+  Cursorwerx question for the tablet input on Windows.
+
 ## 2026-09-27, later: releases. Users receive tags, not the head of main
 
 Until now the install line and `takwerx update` fetched the main branch tarball, and the
