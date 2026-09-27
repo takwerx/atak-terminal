@@ -8,6 +8,7 @@
 #   .\measure.ps1 -Location "lat,lon"    the GPS fix Android gets (the Mac sends the Mac's own; here a fixed one)
 #   .\measure.ps1 -EnablePlugins        switch every installed plugin on in ATAK and restart it (the Mac's takwerx plugin)
 #   .\measure.ps1 -NetTest              time the same downloads on Windows and inside Android; look for a VPN or proxy
+#   .\measure.ps1 -Wheel                record what one mouse-wheel click sends into Android (Cursorwerx's zoom step)
 #   .\measure.ps1 -Stop                 power Android off
 # At the end the results folder is zipped and sent to the Mac on the switch (-Mac host:port),
 # where tools/measure-server.py serves this script and the ATAK APK and receives the results:
@@ -15,7 +16,7 @@
 # A development tool, not part of the product; findings in docs/DECISIONS.md, 2026-09-27.
 param(
   [ValidateSet('stock','angle')][string]$Mode = 'stock',
-  [switch]$AngleOverride, [switch]$AtakTweaks, [switch]$Stop, [switch]$EnablePlugins, [switch]$NetTest,
+  [switch]$AngleOverride, [switch]$AtakTweaks, [switch]$Stop, [switch]$EnablePlugins, [switch]$NetTest, [switch]$Wheel,
   [ValidateSet('auto','nvidia','intel')][string]$Gpu = 'auto',
   [string]$Location = '33.576257,-117.240598',
   [string]$Mac = '192.168.123.99:8000'
@@ -125,7 +126,40 @@ echo "android round trip: 20 requests in $(( (e - s) * 10 )) ms = $(( (e - s) / 
     } else { Say 'Android is not running; the in-Android half is skipped' }
   } catch { Say ("FAILED: {0}" -f $_.Exception.Message) }
 }
-if (-not $NetTest) { try {
+
+# ---- the mouse wheel: what one click becomes inside Android -----------------------------------
+# Cursorwerx zooms one step per wheel click and counts a click as 8 units from the emulator's
+# virtio tablet, which is what the Mac's emulator sends. This records the raw events while the
+# operator clicks the wheel five times, so Windows' unit is known rather than guessed.
+if ($Wheel) {
+  try {
+    $dev = ''
+    $cur = ''
+    foreach ($line in ((& $adb -s $serial shell getevent -pl 2>$null) -split "`n")) {
+      if ($line -match '^add device \d+: (\S+)') { $cur = $Matches[1] }
+      if ($line -match 'name:\s+"(.*)"' -and $Matches[1] -match 'Virtio Tablet') { $dev = $cur }
+    }
+    if (-not $dev) { Say 'wheel: no QEMU Virtio Tablet in getevent'; }
+    else {
+      Say ("wheel: tablet is {0}" -f $dev)
+      Write-Host ''
+      Write-Host '>>> Put the mouse over the map. In the next 12 seconds click the wheel 5 times TOWARDS you,' -ForegroundColor Yellow
+      Write-Host '>>> slowly, one click per second. Nothing else.' -ForegroundColor Yellow
+      Start-Sleep 2
+      Write-Host '    go' -ForegroundColor Green
+      $ev = (& $adb -s $serial shell "timeout 12 getevent -lt $dev" 2>$null) -split "`n" | Where-Object { $_ -match 'REL_WHEEL|REL_HWHEEL|0008|000b' }
+      Set-Content (Join-Path $out 'wheel-events.txt') $ev
+      $lo = @($ev | Where-Object { $_ -match 'REL_WHEEL\s' -and $_ -notmatch 'HI_RES' })
+      $hi = @($ev | Where-Object { $_ -match 'REL_WHEEL_HI_RES' })
+      function Val($l) { $h = ($l.Trim() -split '\s+')[-1]; try { [int32][Convert]::ToInt32($h, 16) } catch { 0 } }
+      $loVals = $lo | ForEach-Object { Val $_ }; $hiVals = $hi | ForEach-Object { Val $_ }
+      Say ("wheel: REL_WHEEL events {0}, values {1}, sum {2}" -f $lo.Count, (($loVals | Select-Object -Unique) -join ','), (($loVals | Measure-Object -Sum).Sum))
+      Say ("wheel: REL_WHEEL_HI_RES events {0}, values {1}, sum {2}" -f $hi.Count, (($hiVals | Select-Object -Unique) -join ','), (($hiVals | Measure-Object -Sum).Sum))
+      Say 'wheel: Cursorwerx takes one zoom step per 8 units of REL_WHEEL (one Mac click); the sum over 5 clicks should be 40 for the same feel'
+    }
+  } catch { Say ("FAILED: {0}" -f $_.Exception.Message) }
+}
+if (-not ($NetTest -or $Wheel)) { try {
 # ---- the machine ---------------------------------------------------------------------------
 $cs = Get-CimInstance Win32_ComputerSystem; $os = Get-CimInstance Win32_OperatingSystem
 $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1

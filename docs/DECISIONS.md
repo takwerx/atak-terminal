@@ -85,6 +85,13 @@ switch and posting its results back to `tools/measure-server.py`. What it found:
   them. Map Depot's entry then came and went from the Tools list while ATAK's registry kept
   it loaded (`Already loaded, skipping plugin extension ... MapDepot`), and ATAK never
   restarted: a Map Depot bug, seen on the Mac too, not the runtime's.
+- **The wheel arrives exactly as on the Mac.** `getevent -lt` on the virtio tablet
+  (`tools/windows-measure.ps1 -Wheel`): five clicks, five `REL_WHEEL` events of 8 each, no
+  high-resolution events. Cursorwerx counts 8 as one click, so a click is one zoom step on both
+  platforms, 15% (`PointerRouter.zoomStep = 1.15`). The operator still found zooming slow on the
+  Dell's notched wheel, about five clicks to double the scale: a Cursorwerx tuning question
+  (a larger step or a setting), not a Windows one, and a Cursorwerx change goes back through
+  tak.gov signing.
 - **Open:** the operator finds the dynamic range-and-bearing endpoint drag worse than on the
   Mac, a Cursorwerx question for the tablet input on Windows. (The Intel Arc: measured, see
   the late-afternoon entry.)
