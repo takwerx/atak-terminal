@@ -354,6 +354,35 @@ emu_up() {
   emu_awake
   emu_provision
   emu_location_apply
+  emu_watchdog
+}
+
+# Until the presentation stall has a cause (DECISIONS 2026-09-26): when Android reports
+# ATAK not responding, ATAK is restarted, which is what a person would do next. Polls the
+# events log every 10 s; one restart per event; ends with the emulator.
+emu_watchdog() {
+  local pid; pid=$(emu_pid); [ -n "$pid" ] || return 0
+  pgrep -f "takwerx-watchdog $pid" >/dev/null 2>&1 && return 0
+  (
+    exec -a "takwerx-watchdog $pid" bash -c '
+      A=$1; D=$2; PKG=$3; LOGF=$4; QPID=$5; last=""
+      while kill -0 "$QPID" 2>/dev/null; do
+        sleep 10
+        ev=$("$A" -s "$D" shell "logcat -b events -d -t 200" 2>/dev/null | grep -E "am_anr.*$PKG" | tail -n1)
+        [ -n "$ev" ] && [ "$ev" != "$last" ] || continue
+        last=$ev
+        printf "%s watchdog: ATAK not responding; restarting it
+" "$(date "+%F %T")" >>"$LOGF"
+        "$A" -s "$D" shell am force-stop "$PKG" >/dev/null 2>&1
+        sleep 2
+        act=$("$A" -s "$D" shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$PKG" 2>/dev/null | tail -n1 | tr -d "")
+        [ -n "$act" ] && "$A" -s "$D" shell am start -n "$act" >/dev/null 2>&1
+        sleep 25
+        "$A" -s "$D" shell input keyevent KEYCODE_HOME >/dev/null 2>&1; sleep 1
+        [ -n "$act" ] && "$A" -s "$D" shell am start -n "$act" >/dev/null 2>&1
+      done' _ "$ADB" "$ADB_ENDPOINT" "$ATAK_PACKAGE" "$LOG_FILE" "$pid"
+  ) >/dev/null 2>&1 </dev/null &
+  disown 2>/dev/null || true
 }
 
 # The display stays on while the Terminal runs. When the Mac's display went to sleep and

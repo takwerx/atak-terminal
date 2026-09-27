@@ -81,9 +81,11 @@ nailed it". What it does and why, each one a separate hour:
   swapchain rebuilds. A second stall at 17:34, same stacks, came with **no** rebuild since
   the first, so resizing is not the trigger; the presentation path stalls on its own after
   30-40 minutes of use, on MoltenVK as this stall and on KosmicKrisp as the fence abort.
-  Untested lead: `-feature -VulkanNativeSwapchain` takes the host swapchain out of that
-  path; needs a run of an hour or more under synthetic use. Recovery is a restart of ATAK
-  only; the emulator is fine.
+  `-feature -VulkanNativeSwapchain` was tried the same evening: stalled again after 28
+  minutes, this time with ATAK's UI thread in `ThreadedRenderer_syncAndDrawFrame`, so the
+  host swapchain is not it either. The display-sleep case (18:55) was separate and is
+  handled by keeping the display awake. Recovery is a restart of ATAK only; `takwerx atak`
+  does it, and `takwerx up` runs a watchdog that does it on ATAK's ANR. Root cause open.
 - **A clean stop is ATAK's QUITAPP, `sync`, then `reboot -p`**; the emulator exits by
   itself in ~4 s. `adb emu kill` is a pulled plug and cost Feature Layer its layer list.
 - **The splash is ATAK's own supported one:** `atak/support/atak_splash.png` (under
