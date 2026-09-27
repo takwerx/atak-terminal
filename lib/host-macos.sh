@@ -176,10 +176,25 @@ LAUNCHER
   cp -f "$SCRCPY_DIR/scrcpy.png" "$mac/scrcpy.png"
   [ -x "$TAKWERX_APP/helpers/maclocation/maclocation" ] && cp -f "$TAKWERX_APP/helpers/maclocation/maclocation" "$mac/maclocation"
   app_icon "$res/icon.icns"
-  codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+  app_sign
   touch "$APP_DIR"
   ok "$APP_NAME.app ready"
   app_dock_add
+}
+
+# The bundle is signed ad hoc, every helper in it first, and the emulator binary (put
+# there by emu_bundle) with the entitlements it needs, or it could not use the
+# hypervisor; a --deep signature of the bundle would strip them. Then the bundle itself.
+app_sign() {
+  local mac="$APP_DIR/Contents/MacOS" ent="$TAKWERX_STATE/emulator.entitlements" b
+  for b in scrcpy maclocation; do
+    [ -f "$mac/$b" ] && codesign --force --sign - "$mac/$b" >/dev/null 2>&1 || true
+  done
+  if [ -f "$mac/qemu-system-aarch64" ] && [ -s "$ent" ]; then
+    codesign --force --sign - --options runtime --entitlements "$ent" "$mac/qemu-system-aarch64" >/dev/null 2>&1 \
+      || warn "Could not sign the emulator inside $APP_NAME.app"
+  fi
+  codesign --force --sign - "$APP_DIR" >/dev/null 2>&1 || true
 }
 
 # The icon is ATAK's own launcher art, taken from the APK the user downloaded (never

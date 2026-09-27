@@ -264,9 +264,9 @@ cmd_plugin() {
   if [ "$(runtime)" = emulator ]; then emu_plugins_enable; fi
 }
 cmd_market()      { android_up; market_install; }
-cmd_app()         { app_build; if [ "$(runtime)" = emulator ]; then emu_bundle_icon; fi; }
-# After ATAK lands, both icons (the app in Applications, the running emulator) take its art.
-icons_refresh()   { app_build; if [ "$(runtime)" = emulator ]; then emu_bundle_icon; fi; }
+cmd_app()         { app_build; }
+# After ATAK lands, the app (and so the running emulator, which is the same app) takes its art.
+icons_refresh()   { app_build; }
 cmd_datapackage() { [ -n "${1:-}" ] || die "Usage: takwerx datapackage FILE.zip"; android_up; datapackage_install "$1"; }
 cmd_display() {
   [ -n "${1:-}" ] || die "Usage: takwerx display screen|ultra|tablet|desktop|phone|WxH@DPI"

@@ -25,22 +25,26 @@ the compromise.
   is sharp there and soft in Launchpad). Nothing of ATAK's is shipped. Before ATAK is
   installed the takwerx icon is used; `takwerx app` after `takwerx apk` swaps it.
 - **Pinned to the Dock once** at build (`persistent-apps`, then the Dock restarts).
-- **The running emulator is "TAKwerx ATAK Terminal" too, in the Dock and at the top
-  left of the screen**, where it said qemu-system-aarch64: macOS names a process after
-  its bundle, or after the executable file when there is none, and the binary has no
-  bundle and no embedded Info.plist. The launcher execs that file at a fixed path, so
-  the file is now a two-line shell script that execs the real binary from inside a
-  bundle built next to it (`emu_bundle`, with the ATAK icon, signed with the binary's
-  own entitlements). Measured on the Studio: a symlink into the bundle is not enough
-  (macOS goes by the path exec'd: still qemu-system-aarch64, though the emulator ran);
-  the script first failed with `dyld: Library not loaded: @rpath/libandroid-emu-tracing`
-  because macOS strips `DYLD_*` from the environment when it runs a system binary such
-  as /bin/sh, and the launcher passes its libraries in `DYLD_LIBRARY_PATH`; the script
-  sets that path again from `ANDROID_EMULATOR_LAUNCHER_DIR` (`lib64/qt/lib`,
-  `lib64/vulkan`, `lib64/gles_angle`, `lib64`), and then System Events reports
-  displayed name "TAKwerx ATAK Terminal", bundle `com.takwerx.atak-terminal`, and
-  Android boots. Two Dock tiles while running, the pinned app and the emulator, both
-  with the same name and icon; merging them would need the launcher to be the process.
+- **The running emulator is the app itself: one Dock tile, "TAKwerx ATAK Terminal",
+  the ATAK icon**, where it said qemu-system-aarch64 and sat next to the pinned app as a
+  second tile. macOS names a process after its bundle, or after the executable file
+  when there is none, and merges it with a Dock tile only when it is the same app; the
+  binary had no bundle and no embedded Info.plist. So the retitled, signed binary is
+  copied into the app in Applications (`Contents/MacOS/qemu-system-aarch64`, APFS
+  clone), and the file the launcher execs at its fixed path in the emulator copy
+  becomes a two-line shell script that execs that copy (`emu_bundle`); the original
+  stays beside it as `qemu-system-aarch64.bin`, and `emu_start` restores the app copy
+  if the app was deleted. Measured on the Studio on the way there: a symlink into a
+  bundle is not enough (macOS goes by the path exec'd: still qemu-system-aarch64,
+  though the emulator ran); a bundle inside the emulator directory did rename the
+  process but left two tiles; the script first failed with `dyld: Library not loaded:
+  @rpath/libandroid-emu-tracing` because macOS strips `DYLD_*` from the environment
+  when it runs a system binary such as /bin/sh, and the launcher passes its libraries
+  in `DYLD_LIBRARY_PATH`; the script sets that path again from
+  `ANDROID_EMULATOR_LAUNCHER_DIR` (`lib64/qt/lib`, `lib64/vulkan`, `lib64/gles_angle`,
+  `lib64`). Signing: the app is signed ad hoc without `--deep`, each helper on its own
+  and the emulator copy with its original entitlements (`app_sign`), because a deep
+  signature would strip the hypervisor entitlement and the emulator would not start.
 
 ## 2026-09-26, laptop night: what the MacBook found that the Studio had not
 

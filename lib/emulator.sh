@@ -136,7 +136,7 @@ emu_prepare() {
     *) die "EMU_VK must be moltenvk or kosmickrisp (is '$EMU_VK')" ;;
   esac
   # The trailing tag is this function's own revision: bump it when the copy is built differently.
-  want="emulator $EMULATOR_VERSION, moltenvk $MOLTENVK_VERSION, r8"
+  want="emulator $EMULATOR_VERSION, moltenvk $MOLTENVK_VERSION, r9"
   if [ "$(tool_version "$EMU_DIR")" != "$want" ]; then
     step "Preparing the GPU emulator ($want)"
     rm -rf "$EMU_DIR"
@@ -147,60 +147,6 @@ emu_prepare() {
     emu_bundle
     printf '%s\n' "$want" >"$EMU_DIR/.version"
   fi
-}
-
-# macOS names a running program after its app bundle, or after the executable file when
-# there is none: "qemu-system-aarch64" in the Dock and at the top left of the screen. The
-# launcher execs that file at a fixed path, so the file becomes a two-line shell script
-# that execs the real binary from inside "TAKwerx ATAK Terminal.app" next to it, built
-# here with the ATAK icon. A symlink into the bundle is not enough: macOS goes by the
-# path exec'd, not where it leads (tried 2026-09-26). The launcher's DYLD_LIBRARY_PATH
-# does not survive /bin/sh, which macOS strips of DYLD_* as a system binary, so the
-# script sets it again from the launcher directory; without it dyld cannot find
-# libandroid-emu-tracing. The bundle is signed with the same entitlements as the binary.
-emu_bundle() {
-  local dir="$EMU_DIR/qemu/darwin-aarch64" app bin ent="$TAKWERX_STATE/emulator.entitlements"
-  bin="$dir/qemu-system-aarch64"; app="$dir/$APP_NAME.app"
-  [ -s "$ent" ] || { warn "No entitlements to sign with; the Dock keeps saying qemu-system-aarch64"; return 0; }
-  mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-  cat >"$app/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>CFBundleName</key><string>$APP_NAME</string>
-  <key>CFBundleDisplayName</key><string>$APP_NAME</string>
-  <key>CFBundleIdentifier</key><string>com.takwerx.atak-terminal</string>
-  <key>CFBundleExecutable</key><string>qemu-system-aarch64</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleIconFile</key><string>icon</string>
-  <key>CFBundleVersion</key><string>$TAKWERX_VERSION</string>
-  <key>NSHighResolutionCapable</key><true/>
-</dict></plist>
-PLIST
-  mv -f "$bin" "$app/Contents/MacOS/qemu-system-aarch64" || die "Could not move the emulator into its bundle"
-  cat >"$bin" <<WRAP
-#!/bin/sh
-# Written by takwerx. Starts the emulator from inside its app bundle, so macOS names it
-# and draws its icon from the bundle instead of showing "qemu-system-aarch64". The
-# launcher's DYLD_LIBRARY_PATH does not survive /bin/sh (macOS strips DYLD_* for system
-# binaries), so it is set again here from the launcher directory.
-E=\${ANDROID_EMULATOR_LAUNCHER_DIR:-\$(cd "\$(dirname "\$0")/../.." && pwd)}
-export DYLD_LIBRARY_PATH="\$E/lib64/qt/lib:\$E/lib64/vulkan:\$E/lib64/gles_angle:\$E/lib64"
-exec "\$(dirname "\$0")/$APP_NAME.app/Contents/MacOS/qemu-system-aarch64" "\$@"
-WRAP
-  chmod +x "$bin"
-  app_icon "$app/Contents/Resources/icon.icns"
-  codesign --force --sign - --options runtime --entitlements "$ent" "$app" >/dev/null 2>&1 \
-    || warn "Could not sign the emulator bundle; it may not start"
-}
-
-# The bundle's icon follows ATAK: rebuilt after an APK install (takwerx apk), when the
-# art becomes available, without rebuilding the emulator copy.
-emu_bundle_icon() {
-  local app="$EMU_DIR/qemu/darwin-aarch64/$APP_NAME.app" ent="$TAKWERX_STATE/emulator.entitlements"
-  [ -d "$app" ] || return 0
-  app_icon "$app/Contents/Resources/icon.icns"
-  codesign --force --sign - --options runtime --entitlements "$ent" "$app" >/dev/null 2>&1 || true
 }
 
 # The window is titled from one format string, "%s Emulator - %s:%d" (product, AVD, port).
@@ -221,6 +167,48 @@ emu_retitle() {
     mv -f "$bin.orig" "$bin"; return 0
   fi
   rm -f "$bin.orig"
+}
+
+# macOS names a running program after its app bundle, or after the executable file when
+# there is none: "qemu-system-aarch64" in the Dock and at the top left of the screen,
+# and a second Dock tile next to the pinned app. So the emulator runs from inside
+# "TAKwerx ATAK Terminal.app" in Applications: the one app is what the user clicks and
+# what runs, one tile, one name, the ATAK icon. The launcher execs the binary at a fixed
+# path in the emulator copy, so that file becomes a two-line shell script that execs the
+# copy inside the app. A symlink is not enough: macOS goes by the path exec'd, not where
+# it leads (tried 2026-09-26). The launcher's DYLD_LIBRARY_PATH does not survive
+# /bin/sh, which macOS strips of DYLD_* as a system binary, so the script sets it again
+# from the launcher directory; without it dyld cannot find libandroid-emu-tracing. The
+# retitled, signed binary stays in the copy as qemu-system-aarch64.bin, so the app can be
+# rebuilt from it at any time (emu_start checks).
+emu_bundle() {
+  local dir="$EMU_DIR/qemu/darwin-aarch64" bin mac="$APP_DIR/Contents/MacOS"
+  bin="$dir/qemu-system-aarch64"
+  [ -d "$APP_DIR" ] || app_build
+  if [ ! -f "$dir/qemu-system-aarch64.bin" ]; then
+    mv -f "$bin" "$dir/qemu-system-aarch64.bin" || die "Could not set the emulator aside"
+  fi
+  mkdir -p "$mac"
+  cp -cf "$dir/qemu-system-aarch64.bin" "$mac/qemu-system-aarch64" 2>/dev/null \
+    || cp -f "$dir/qemu-system-aarch64.bin" "$mac/qemu-system-aarch64" || die "Could not put the emulator into $APP_NAME.app"
+  cat >"$bin" <<WRAP
+#!/bin/sh
+# Written by takwerx. Starts the emulator from inside $APP_NAME.app, so macOS names it
+# and draws its icon from that app instead of showing "qemu-system-aarch64". The
+# launcher's DYLD_LIBRARY_PATH does not survive /bin/sh (macOS strips DYLD_* for system
+# binaries), so it is set again here from the launcher directory.
+E=\${ANDROID_EMULATOR_LAUNCHER_DIR:-\$(cd "\$(dirname "\$0")/../.." && pwd)}
+export DYLD_LIBRARY_PATH="\$E/lib64/qt/lib:\$E/lib64/vulkan:\$E/lib64/gles_angle:\$E/lib64"
+exec "$mac/qemu-system-aarch64" "\$@"
+WRAP
+  chmod +x "$bin"
+  app_sign
+}
+
+# The app's emulator copy is gone (the app was deleted or rebuilt from scratch): put it back.
+emu_bundle_check() {
+  [ -f "$EMU_DIR/qemu/darwin-aarch64/qemu-system-aarch64.bin" ] || return 0
+  [ -f "$APP_DIR/Contents/MacOS/qemu-system-aarch64" ] || emu_bundle
 }
 
 # Android's screen, "W H DPI". The emulator scales a fixed Android screen into whatever size
@@ -347,6 +335,7 @@ emu_start() {
   [ -x "$ADB" ] || die "adb is missing (scrcpy is not installed). Run: takwerx init"
   emu_running && return 0
   emu_prepare
+  emu_bundle_check
   mkdir -p "$EMU_AVD_HOME"
   emu_avd_create
   rm -f "$EMU_AVD_HOME/$EMU_AVD.avd/"*.lock
