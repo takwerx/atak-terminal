@@ -351,8 +351,20 @@ emu_up() {
     emu_wait 300 || die "Android did not come up (the emulator exited or took over 5 minutes). See $EMU_LOG"
   fi
   ok "Android is up"
+  emu_awake
   emu_provision
   emu_location_apply
+}
+
+# The display stays on while the Terminal runs. When the Mac's display went to sleep and
+# came back (18:28 to 18:55 on 2026-09-26), the emulator rebuilt its window surface and
+# ATAK answered its first input 28 s later with "isn't responding". A map terminal is
+# something one looks at; it does not go dark. caffeinate ends with the emulator.
+emu_awake() {
+  local pid; pid=$(emu_pid); [ -n "$pid" ] || return 0
+  pgrep -f "caffeinate -d -i -w $pid" >/dev/null 2>&1 && return 0
+  nohup caffeinate -d -i -w "$pid" >/dev/null 2>&1 </dev/null &
+  disown 2>/dev/null || true
 }
 
 # A clean power-off. `adb emu kill` is a pulled plug: a plugin mid-save lost its whole saved
