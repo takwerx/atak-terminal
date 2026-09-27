@@ -1,28 +1,37 @@
 # TAKwerx ATAK Terminal
 
 **Beta.** Real ATAK, the Android app with its real plugins, running in a window on
-your Mac, on the Mac's GPU. Two steps install it. After that there is a
-**TAKwerx ATAK Terminal** icon in Applications and the Dock, and you open it like
-any other app.
+your Mac or Windows PC, on its GPU. Two steps install it. After that there is a
+**TAKwerx ATAK Terminal** icon (in Applications and the Dock on a Mac, in the Start
+Menu and on the desktop on Windows), and you open it like any other app.
 
 1. **Download ATAK-CIV first** from [tak.gov](https://tak.gov/products/atak-civ)
    (it needs a free login). Either build works, the regular one or the "small" one
    without the phone-only extras. Leave the file in Downloads; if several versions
    are there, the newest is used.
-2. Paste this line in Terminal:
+2. On a **Mac**, paste this line in Terminal:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash
 ```
 
+   On **Windows**, paste this line in PowerShell (a normal window, not "as
+   Administrator"):
+
+```powershell
+irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex
+```
+
 That line downloads the tool and Google's Android emulator, starts Android 14 on
-your Mac's GPU, installs the ATAK APK from Downloads (or opens a file picker so you
+your computer's GPU, installs the ATAK APK from Downloads (or opens a file picker so you
 can point at it), adds the TAKWERX Market plugin so your plugins install and update
 from inside ATAK, creates the icon, and opens the window. First run takes a few
 minutes and about 2 GB of downloads; it asks once to accept Google's Android SDK
 terms. After that, opening ATAK takes about half a minute.
 
-If you skipped step 1, the icon asks for the APK the first time you open it.
+If you skipped step 1, the icon asks for the APK the first time you open it. On
+Windows, right-click the window's taskbar button once and choose **Pin to taskbar**;
+Windows lets no program pin itself.
 
 **First run, in ATAK:**
 
@@ -42,25 +51,40 @@ ATAK's EULA; that click is yours to make.
 
 - A Mac with Apple Silicon and macOS 13 or newer. 16 GB of memory is comfortable;
   8 GB is untested. Intel Macs use a different, slower path (see Runtimes) and are
-  untested in this beta. Windows and Linux are next.
+  untested in this beta.
+- Or a Windows 10 (2004 or newer) or Windows 11 PC with an Intel or AMD processor, a
+  GPU with current drivers (NVIDIA, AMD, or Intel Arc or Iris Xe), and 16 GB of memory.
+  Windows on ARM has no Android Emulator from Google. Android needs **Windows
+  Hypervisor Platform**; it is already on where your IT department runs Windows'
+  virtualization-based security, and then nothing needs an administrator. Where it is
+  off, the installer says so and how to switch it on (an administrator, once, and a
+  restart).
+- Linux is next.
 - The ATAK-CIV APK from [tak.gov](https://tak.gov/products/atak-civ). ATAK is not
   redistributed here and cannot be fetched for you; you download it once and takwerx
   installs it.
 - About 12 GB of disk and an internet connection for the first run.
 
-Nothing else. No Homebrew, no Docker, no Android Studio, no developer account.
+Nothing else. No Homebrew, no Docker, no Android Studio, no developer account, and
+on Windows no installer package and nothing from the Microsoft Store.
 
 ## What works in the beta
 
-- ATAK 5.8 with plugins, at the Mac screen's full resolution, on the GPU.
+- ATAK 5.7 and 5.8 with plugins, at the screen's full resolution, on the GPU: about
+  58 fps on a Mac Studio, about 50 on a laptop's NVIDIA RTX 2000 and 41-44 on its
+  Intel Arc.
 - Mouse and trackpad: the TAKwerx **Cursorwerx** plugin makes ATAK behave for a mouse
   (wheel zooms at the cursor, wheel scrolls lists and panes, click and drag pans,
   clicks land in text fields, Escape is Back). Install it from the Market.
-- Position: your Mac's location, an exact coordinate, or a rough fix from your IP.
+- Position: your computer's own location (the Mac's, or Windows' location service), an
+  exact coordinate, or a rough fix from your IP.
+- ATAK updates from inside ATAK: the Market offers the newest ATAK-CIV and moves your
+  plugins over to it.
 - TAK Portal "open in app": open the portal in Chrome inside Android, sign in, and
   ATAK enrols with the server. Chrome is the one Google app kept; the rest are off.
-- Drag any APK from Finder onto the window to install it; ATAK offers to load a
-  plugin. Drag any other file and it lands in Android's Downloads folder.
+- On a Mac, drag any APK from Finder onto the window to install it; ATAK offers to
+  load a plugin. Drag any other file and it lands in Android's Downloads folder. On
+  Windows, `takwerx plugin FILE.apk` installs a plugin and switches it on.
 
 Known issues, being worked on:
 
@@ -69,12 +93,13 @@ Known issues, being worked on:
   restarts Android. Nothing is lost either way.
 - No multicast: Android sits behind the emulator's NAT, so TAK servers over TLS work
   and situational awareness on 239.2.3.1 does not.
-- The Mac app is not code-signed. That is why the install is a Terminal line: a
-  downloaded app would be blocked by Gatekeeper.
+- Nothing is code-signed. That is why the install is a line you paste: a downloaded
+  app would be blocked by Gatekeeper on a Mac and by SmartScreen on Windows.
 
 ## Daily use
 
-Open **TAKwerx ATAK Terminal** from the Dock, Applications, Launchpad or Spotlight.
+Open **TAKwerx ATAK Terminal** from the Dock, Applications, Launchpad or Spotlight on a
+Mac, or from the Start Menu, the desktop or your pinned taskbar button on Windows.
 Close the window when you are done; `takwerx down` stops Android completely and frees
 the memory. Everything ATAK stores, server connections, certificates, map caches,
 plugin settings, survives restarts and takwerx updates.
@@ -106,9 +131,13 @@ takwerx update              update takwerx and its pinned tools
 takwerx uninstall           remove everything
 ```
 
+On Windows the same commands work in PowerShell. `takwerx gpu Intel` or `takwerx gpu
+NVIDIA` picks the graphics on a laptop with two (then `takwerx restart`); `takwerx doctor`
+and the Mac's VM commands do not exist there.
+
 ## Updating takwerx
 
-One line, in Terminal:
+One line, in Terminal on a Mac or PowerShell on Windows:
 
 ```bash
 takwerx update
@@ -193,7 +222,8 @@ to keep it.
 
 ## Runtimes
 
-The default on Apple Silicon is Google's Android Emulator on the Mac's GPU
+On Windows there is one runtime, Google's Android Emulator on the PC's GPU. On a Mac
+the default on Apple Silicon is the same emulator on the Mac's GPU
 (`takwerx runtime emulator`): fast, full-size icons, no virtual machine, no admin
 password. The other runtime (`takwerx runtime redroid`) runs Android in a small Linux
 virtual machine with software rendering; it is slower and its map is choppy, but it
@@ -202,14 +232,14 @@ and it is the path for Intel Macs. Both keep their own Android data.
 
 ## Where things live
 
-| What | Where |
-|---|---|
-| takwerx itself | `~/.takwerx/app` |
-| The emulator, Android image, tools | `~/.takwerx/tools` |
-| Android's data (the AVD) | `~/.takwerx/avd`; `takwerx reset` wipes it |
-| Settings | `~/.takwerx/config` |
-| Logs | `~/.takwerx/logs` |
-| The icon | `/Applications/TAKwerx ATAK Terminal.app` |
+| What | Mac | Windows |
+|---|---|---|
+| takwerx itself | `~/.takwerx/app` | `%LOCALAPPDATA%\takwerx\app` |
+| The emulator, Android image, tools | `~/.takwerx/tools` | `%LOCALAPPDATA%\takwerx\tools` |
+| Android's data; `takwerx reset` wipes it | `~/.takwerx/avd` | `%LOCALAPPDATA%\takwerx\avd` |
+| Settings | `~/.takwerx/config` | `%LOCALAPPDATA%\takwerx\config` |
+| Logs | `~/.takwerx/logs` | `%LOCALAPPDATA%\takwerx\logs` |
+| The icon | `/Applications/TAKwerx ATAK Terminal.app` | Start Menu and desktop shortcuts |
 
 `takwerx uninstall` removes all of it.
 
@@ -228,6 +258,14 @@ and it is the path for Intel Macs. Both keep their own Android data.
   install line rebuilds everything.
 - **macOS asks about Terminal and Downloads, or about location.** Allow it; the
   first is for reading the ATAK APK, the second for `takwerx location here`.
+- **Windows: "takwerx is not recognized".** Open a new PowerShell window; the install
+  adds the command for windows opened after it.
+- **Windows: Windows Hypervisor Platform is off.** Settings, System, Optional
+  features, More Windows features, tick Windows Hypervisor Platform, restart; or ask
+  IT. Then `takwerx init` again.
+- **Windows: the position is wrong or missing.** `takwerx location here` uses Windows'
+  location service: Settings, Privacy & security, Location, with "Let desktop apps
+  access your location" on. Or `takwerx location LAT,LON`.
 
 ## Security notes
 
@@ -241,13 +279,20 @@ and it is the path for Intel Macs. Both keep their own Android data.
   Apple. The emulator inside it is Google's binary, re-signed locally because three
   strings in it are patched (the window title, its own Dock icon, and the name of the
   Qt path file it carries, which points at the wrong place from inside an app).
+- On Windows nothing of Google's is modified. The window's title, icon and taskbar
+  button are set while it runs. Everything lives in your own user folder, and nothing
+  needs an administrator except switching on Windows Hypervisor Platform, once, where
+  it is off.
 
 ## Status
 
-Beta, macOS on Apple Silicon. Verified end to end on a Mac Studio (M-series, macOS 26)
-and a 16 GB MacBook Pro (M2 Pro): install from scratch with the line above, ATAK 5.8
-and the Market plugin, TAK Portal enrolment, plugins by Market and by drag. Intel
-Macs, Windows and Linux: not yet.
+Beta, on macOS with Apple Silicon and on Windows. Verified end to end on a Mac Studio
+(M-series, macOS 26) and a 16 GB MacBook Pro (M2 Pro): install from scratch with the
+line above, ATAK 5.8 and the Market plugin, TAK Portal enrolment, plugins by Market and
+by drag. On Windows, on a company-managed Dell Precision 5490 (Windows 11, no
+administrator rights, NVIDIA RTX 2000 Ada and Intel Arc): install from the line above,
+ATAK 5.7, the Market, Cursorwerx, and ATAK's own update to 5.8 through the Market.
+Intel Macs and Linux: not yet.
 
 Every non-obvious finding, with the reasoning and the dead ends, is in
 [docs/DECISIONS.md](docs/DECISIONS.md).
@@ -256,4 +301,4 @@ Every non-obvious finding, with the reasoning and the dead ends, is in
 
 AGPL-3.0-or-later, the same as the other TAKWERX projects. ATAK and the ATAK name
 belong to the TAK Product Center and are not part of this repository; the ATAK icon
-shown on the Mac app is read from the APK you downloaded.
+the app shows is read from the APK you downloaded.
