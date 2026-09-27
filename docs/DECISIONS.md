@@ -67,7 +67,11 @@ was measured there over SSH while the operator used it.
   zero crashes, pages render, and the portal's sign-in page came up on the MacBook.
   Provisioning writes the file on every boot. `--disable-gpu-compositing` and
   `--disable-gpu` were the fallbacks and were not needed. ATAK's WebView (Esri sign-in)
-  never had the problem: in-process, no SurfaceControl.
+  never had the problem: in-process, no SurfaceControl. With the flag, the whole TAK
+  Portal flow ran on the MacBook at 22:11: Chrome's "open in app" fired
+  `tak://com.atakmap.app/...` into ATAK (BROWSABLE VIEW intent), ATAK enrolled, connected
+  to the server on 8089 over SSL, negotiated protocol, and pulled version (5.8.84),
+  groups and contacts over 8443 within a second.
 - **A crash-restart of ATAK does not ask "load plugins?" here**: after the display stack
   restart, `am start` brought ATAK back with every plugin loaded and no dialog.
 
