@@ -24,6 +24,16 @@ terms. After that, opening ATAK takes about half a minute.
 
 If you skipped step 1, the icon asks for the APK the first time you open it.
 
+**First run, in ATAK:**
+
+1. Accept ATAK's EULA and go through its first-start questions.
+2. Wait a moment: takwerx installs the TAKWERX Market plugin and ATAK asks to load
+   it, or simply shows it. Say yes if asked.
+3. Open the toolbar overflow (the ☰ button at the right end of the toolbar), tap
+   **Market**, and install **Cursorwerx**. That is what makes the mouse and trackpad
+   behave: wheel zoom at the cursor, scrolling in menus and panes, clicks in text
+   fields. Install any other plugins you want the same way.
+
 There is no account, no telemetry, no paid tier, and nothing is sent anywhere.
 Everything runs on your own machine. The first thing you see in the window is
 ATAK's EULA; that click is yours to make.
