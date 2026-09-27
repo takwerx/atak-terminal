@@ -227,15 +227,25 @@ container_start() {
     container_create
   fi
 }
+# ATAK takes no quit from outside. Its QUITAPP action is registered on AtakBroadcast, ATAK's
+# in-process bus (ATAKActivity.preLoadAssets), so `am broadcast` is delivered to nobody; that
+# is all this function did until 2026-09-27, and callers carried on as if ATAK had exited
+# (DECISIONS 2026-09-27). So ATAK is sent home first, which runs its onPause and onStop:
+# pending preferences are written and state saved, as when a user switches apps. Then the
+# process is stopped; `am kill` spares a process with a foreground service, and ATAK keeps
+# one, so it is force-stop, what Android itself does to a backgrounded app it needs gone.
 atak_quit() {
   atak_running || return 0
-  adb_sh am broadcast -a com.atakmap.app.QUITAPP --ez FORCE_QUIT true >/dev/null 2>&1 || true
-  local i; for i in 1 2 3 4 5 6 7 8; do atak_running || return 0; sleep 1; done
+  adb_sh input keyevent KEYCODE_HOME >/dev/null 2>&1 || true
+  sleep 2
+  adb_sh am force-stop "$ATAK_PACKAGE" >/dev/null 2>&1 || true
+  local i; for i in 1 2 3 4 5; do atak_running || return 0; sleep 1; done
+  warn "ATAK is still running after being stopped"
 }
 container_stop() {
   if container_running; then
     step "Stopping Android"
-    # Ask ATAK to quit first so it does not report an unclean exit next time; then Android's
+    # ATAK is stopped first (atak_quit: home, so it saves, then force-stop); then Android's
     # init ignores SIGTERM, so sync the filesystems and let podman kill it quickly.
     atak_quit
     adb_sh sync >/dev/null 2>&1 || true

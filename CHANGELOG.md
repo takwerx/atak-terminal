@@ -10,6 +10,9 @@ icon mentions a new release within a day of it, and so do `takwerx up` and
   emulator's network simulator: a small request inside Android went from about 800 ms to
   about 45 ms, downloads from 3-4 MB/s to your Mac's own speed. Takes effect at the next
   start after `takwerx update` (`takwerx restart`).
+- `takwerx plugin` restarts ATAK for real, so a plugin it installs is loaded right away.
+  ATAK never received the quit takwerx sent it; `takwerx down` and `takwerx atak` now stop
+  it properly too.
 
 ## 0.1.1 — 2026-09-27
 

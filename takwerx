@@ -256,7 +256,6 @@ cmd_atak() {
   atak_installed || die "ATAK is not installed (takwerx apk)"
   step "Restarting ATAK"
   atak_quit
-  adb_sh am force-stop "$ATAK_PACKAGE" >/dev/null 2>&1 || true
   sleep 2
   atak_launch
   if [ "$(runtime)" = emulator ]; then emu_focus_fix; emu_front; fi

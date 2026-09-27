@@ -2,6 +2,29 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-27, evening: ATAK never received takwerx's quit. `takwerx plugin` and `down` now stop it for real
+
+Found while loading Cursorwerx 0.2 with `takwerx plugin`: it printed "Plugin switched on;
+ATAK is restarting", and ATAK kept running as the same process, started before the install.
+`am broadcast -a com.atakmap.app.QUITAPP --ez FORCE_QUIT true` by hand: "Broadcast
+completed", ATAK still up 12 s later. ATAK's source says why: `ATAKActivity.preLoadAssets`
+registers QUITAPP on `AtakBroadcast`, ATAK's in-process bus, and nothing on Android's side.
+No exported receiver in the manifest takes it, and `onNewIntent` forwards only a parcelable
+`internalIntent` extra, which `am` cannot build. So there is no clean quit from outside,
+and `atak_quit` had been a no-op since the first day, on both runtimes.
+
+What that broke: `takwerx plugin` edited `shouldLoad` in ATAK's preferences while ATAK ran.
+ATAK keeps its preferences in memory and writes the whole file on its next change, so the
+edit could be put back to false, and the plugin did not load until ATAK happened to
+restart. A plausible part of "plugins come and go" on both machines. `takwerx down` and
+`atak` also skipped the quit they announced.
+
+`atak_quit` now sends ATAK home first (its onPause and onStop run: pending preferences
+written, state saved, as when a user switches apps), then `am force-stop` (`am kill` spares
+a process with a foreground service, which ATAK keeps). Measured with Cursorwerx 0.2's
+release APK: ATAK pid 4514 before, 6007 after, Cursorwerx loaded about 12 s later, no
+"load plugins?" question, `shouldLoad` true, and the plugin's own stored setting kept.
+
 ## 2026-09-27, late afternoon: slow tiles were the emulator's netsim Wi-Fi, on both platforms. And the Intel GPU
 
 The operator saw map tiles arrive more slowly on the Dell than on the Mac. Timed with the
@@ -452,8 +475,10 @@ nailed it". What it does and why, each one a separate hour:
   knob. KosmicKrisp does not log these but has its own fence aborts. Lead left: the
   Android 15 image ships a newer ANGLE, which may convert a mismatched default attribute
   instead of failing; the operator's `atakgpu` AVD (android-35) can test it.
-- **A clean stop is ATAK's QUITAPP, `sync`, then `reboot -p`**; the emulator exits by
+- **A clean stop is ATAK stopped, `sync`, then `reboot -p`**; the emulator exits by
   itself in ~4 s. `adb emu kill` is a pulled plug and cost Feature Layer its layer list.
+  (Corrected 2026-09-27: the QUITAPP broadcast this first named never reached ATAK; see
+  that day's entry. The sync and the orderly power-off are what made it clean.)
 - **The splash is ATAK's own supported one:** `atak/support/atak_splash.png` (under
   4096 px a side, full-screen centre-crop), pushed by provisioning from
   `assets/atak_splash.png` when its md5 differs. Nothing in ATAK is modified. The SDK docs
