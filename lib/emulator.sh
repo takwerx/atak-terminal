@@ -136,7 +136,7 @@ emu_prepare() {
     *) die "EMU_VK must be moltenvk or kosmickrisp (is '$EMU_VK')" ;;
   esac
   # The trailing tag is this function's own revision: bump it when the copy is built differently.
-  want="emulator $EMULATOR_VERSION, moltenvk $MOLTENVK_VERSION, r10"
+  want="emulator $EMULATOR_VERSION, moltenvk $MOLTENVK_VERSION, r11"
   if [ "$(tool_version "$EMU_DIR")" != "$want" ]; then
     step "Preparing the GPU emulator ($want)"
     rm -rf "$EMU_DIR"
@@ -157,15 +157,23 @@ emu_prepare() {
 # hypervisor, and library validation off, which is also what lets it load the swapped
 # drivers). macOS then sees a new app and may ask once for Local Network access. A failed
 # patch leaves the stock title, nothing worse.
-# The same pass blanks the name of the emulator's own Dock icon: Qt's setWindowIcon sets
-# the Dock tile at run time (the Android-on-a-device picture, 256 and 128 px PNGs in the
-# binary), over the app's icon. With the resource name misspelt by one character the
-# QIcon is null, Qt sets no icon, and the Dock shows the app's, ATAK's (2026-09-26).
+# The same pass takes away the emulator's own Dock icon: skin_winsys_set_window_icon
+# hands Qt the Android-on-a-device picture at start (three PNGs compiled into the
+# binary, emulator_icon_32/128/256.png, found by name in a table), and on macOS that
+# sets the Dock tile over the app's icon. The three PNGs, each the only one of its size,
+# get their first signature byte zeroed: the pixmap fails to load, the QIcon is null,
+# Qt sets nothing, and the Dock keeps the app's icon, ATAK's. The slots are too small
+# for ATAK's art itself (7.5 KB for 256 px). Misspelling the Qt resource name
+# :/all/android_studio_icon, tried first, changed nothing: that is a different picture
+# (2026-09-26).
 emu_retitle() {
   local bin="$EMU_DIR/qemu/darwin-aarch64/qemu-system-aarch64" ent="$TAKWERX_STATE/emulator.entitlements"
   codesign -d --entitlements :- "$bin" >"$ent" 2>/dev/null && [ -s "$ent" ] || { warn "Could not read the emulator's entitlements; keeping its title"; return 0; }
   cp -p "$bin" "$bin.orig"
-  perl -0777 -pi -e 's/%s Emulator - %s:%d\x00%s: %dx%d\n\x00/TAKwerx ATAK Terminal\x00: %dx%d\n\x00/; s|:/all/android_studio_icon|:/all/android_studio_ic0n|g' "$bin"
+  perl -0777 -pi -e 's/%s Emulator - %s:%d\x00%s: %dx%d\n\x00/TAKwerx ATAK Terminal\x00: %dx%d\n\x00/;
+    s/\x89(PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x20\x00\x00\x00\x20)/\x00$1/;
+    s/\x89(PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x80\x00\x00\x00\x80)/\x00$1/;
+    s/\x89(PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x01\x00\x00\x00\x01\x00)/\x00$1/' "$bin"
   if cmp -s "$bin" "$bin.orig" || ! codesign --force --sign - --options runtime --entitlements "$ent" "$bin" >/dev/null 2>&1; then
     warn "Could not retitle the emulator window; keeping its title"
     mv -f "$bin.orig" "$bin"; return 0

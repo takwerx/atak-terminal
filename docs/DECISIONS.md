@@ -46,12 +46,16 @@ the compromise.
   and the emulator copy with its original entitlements (`app_sign`), because a deep
   signature would strip the hypervisor entitlement and the emulator would not start.
   Two more things measured on the way: (1) with all that in place the Dock tile still
-  showed the emulator's own picture, Android on a device, because the emulator calls
-  Qt's `setWindowIcon`, which on macOS sets the Dock tile at run time over the bundle's
-  icon; the picture is two PNGs (256 and 128 px) in the binary, too small a slot for
-  ATAK's art, so the retitle pass misspells the resource name `:/all/android_studio_icon`
-  by one character instead, the QIcon comes back null, Qt sets nothing, and the Dock
-  keeps the app's icon. (2) `app_dock_add` pinned the app again on every build, four
+  showed the emulator's own picture, Android on a device, because the emulator hands
+  Qt a window icon at start (`skin_winsys_set_window_icon`), which on macOS sets the
+  Dock tile at run time over the bundle's icon. The picture is three PNGs compiled
+  into the binary, `emulator_icon_32/128/256.png`, found by name in a table; the slots
+  are too small for ATAK's art (7.5 KB for 256 px), so the retitle pass zeroes the
+  first signature byte of each (each is the only PNG of its size in the binary): the
+  pixmap fails to load, the QIcon is null, Qt sets nothing, and the Dock keeps the
+  app's icon. Misspelling the Qt resource name `:/all/android_studio_icon`, the first
+  guess, changed nothing on the MacBook: that is a different picture, so it is patched
+  no more. (2) `app_dock_add` pinned the app again on every build, four
   tiles on the MacBook, because the Dock stores the path URL-encoded (`%20`) and the
   check looked for the plain path; it now walks the tiles by index through
   `defaults export`, PlistBuddy and `defaults import`, removes every TAKwerx tile and
