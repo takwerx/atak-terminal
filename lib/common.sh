@@ -150,9 +150,9 @@ clamp() {
   echo "$v"
 }
 
-# Newest ATAK CIV APK in ~/Downloads, if any.
+# Newest ATAK CIV APK next to takwerx (the folder it was downloaded in) or in ~/Downloads.
 find_atak_apk() {
-  ls -t "$HOME"/Downloads/ATAK-*civ-release.apk 2>/dev/null | head -n1 || true
+  ls -t "$TAKWERX_APP"/../ATAK-*civ-release.apk "$TAKWERX_APP"/ATAK-*civ-release.apk "$HOME"/Downloads/ATAK-*civ-release.apk 2>/dev/null | head -n1 || true
 }
 # ATAK-5.8.0.4-174b425-civ-release.apk -> 5.8.0.4
 apk_version_from_name() { basename "$1" | sed -nE 's/^ATAK-([0-9]+(\.[0-9]+)+)-.*/\1/p'; }
