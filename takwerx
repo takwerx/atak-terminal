@@ -212,7 +212,7 @@ init_emulator() {
 cmd_up() {
   local window=1
   [ "${1:-}" = --no-window ] && window=0
-  if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then notify "Starting ATAK"; fi
+  if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then notify "Starting ATAK"; update_check; fi
   rm -f "$TAKWERX_STATE/stopping"
   android_up
   location_refresh

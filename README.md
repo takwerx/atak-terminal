@@ -106,6 +106,24 @@ takwerx update              update takwerx and its pinned tools
 takwerx uninstall           remove everything
 ```
 
+## Updating takwerx
+
+One line, in Terminal:
+
+```bash
+takwerx update
+```
+
+It fetches the newest takwerx, fetches any tool whose pinned version moved (the
+emulator, the Android image, the graphics driver), rebuilds the app icon, and
+re-applies its Android settings to the running Android. Your Android data, ATAK,
+plugins and settings stay. Running the install line from the top of this page again
+does the same thing.
+
+ATAK itself updates with `takwerx apk` after you download a new APK, and plugins
+update from the Market inside ATAK. When a newer takwerx is out, opening the app
+mentions it once a day.
+
 ## Plugins
 
 Three ways, all inside the window you already have:

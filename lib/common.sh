@@ -136,6 +136,19 @@ atak_ask_pick() {
   esac
 }
 
+# Once a day, from the app icon: is a newer takwerx published? Three seconds at most,
+# nothing sent but the request for one small file, and silent on any failure.
+update_check() {
+  local stamp="$TAKWERX_STATE/update-check" latest repo=${TAKWERX_REPO:-takwerx/atak-terminal}
+  if [ -f "$stamp" ] && [ -n "$(find "$stamp" -mtime -1 2>/dev/null)" ]; then return 0; fi
+  mkdir -p "$TAKWERX_STATE"; touch "$stamp"
+  latest=$(curl -fsSL --max-time 3 "https://raw.githubusercontent.com/$repo/main/VERSION" 2>/dev/null | tr -d '[:space:]') || return 0
+  [ -n "$latest" ] && [ "$latest" != "$TAKWERX_VERSION" ] || return 0
+  [ "$(printf '%s\n%s\n' "$TAKWERX_VERSION" "$latest" | sort -V | tail -n1)" = "$latest" ] || return 0
+  notify "takwerx $latest is available (you have $TAKWERX_VERSION). In Terminal: takwerx update"
+  log "update available: $latest"
+}
+
 # download URL DEST: skips when DEST already exists, shows progress on a terminal.
 download() {
   local url=$1 dest=$2
