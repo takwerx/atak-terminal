@@ -29,8 +29,12 @@ EMU_VK=$(config_get EMU_VK moltenvk)
 EMU_FEATURES=$(config_get EMU_FEATURES "")
 # Google apps the image ships that the terminal has no use for. Off at provisioning, so
 # they neither sit in memory nor fill the dock; Chrome stays. Override in the config to
-# keep some, or set it empty to keep them all.
-EMU_TRIM_APPS=$(config_get EMU_TRIM_APPS "com.google.android.gm com.google.android.youtube
+# keep some, or set it empty to keep them all. Play services is in the list: its location
+# providers take every GNSS fix and each one failed to reach its own dead callback, a
+# 15-line stack trace up to 300 times a second in the system log (2026-09-26). Without
+# it ATAK's GPS feed is untouched (the GNSS service is Android's), Chrome opens pages,
+# and only a Google-account sign-in inside Chrome is lost.
+EMU_TRIM_APPS=$(config_get EMU_TRIM_APPS "com.google.android.gms com.google.android.gm com.google.android.youtube
   com.google.android.apps.youtube.music com.google.android.apps.photos
   com.google.android.apps.messaging com.google.android.dialer
   com.google.android.googlequicksearchbox com.google.android.apps.wellbeing
@@ -366,13 +370,14 @@ emu_provision() {
   # theme (ATAK's is dark: white text) and its pill from the system's (light by default:
   # a white pill). White on white, unreadable. ATAK itself looks the same either way.
   # Dark mode, so ATAK's toasts are readable (the light toast draws white on white).
-  # SystemUI keeps the theme it started with for the toasts it renders: after the
-  # switch, toasts came up as an empty pill until SystemUI restarted (2026-09-26).
-  # Only the first provisioning switches; later boots start in dark mode.
-  if ! adb_sh cmd uimode night 2>/dev/null | grep -q "yes"; then
-    adb_sh cmd uimode night yes >/dev/null 2>&1 || true
-    sleep 2; adb_sh pkill -f com.android.systemui >/dev/null 2>&1 || true
-  fi
+  adb_sh cmd uimode night yes >/dev/null 2>&1 || true
+  # SystemUI restarts on every boot, after the two settings above. It starts before
+  # provisioning can set ANGLE's override, and without it its shaders fail to compile
+  # on MoltenVK: 70 log lines a second, and the same pipeline failure preceded a
+  # display-stack restart on the MacBook. It also keeps the theme it started with for
+  # the toasts it draws: after the dark-mode switch they were an empty pill until it
+  # restarted (2026-09-26). Two seconds of status bar at boot, before ATAK is up.
+  adb_sh pkill -f com.android.systemui >/dev/null 2>&1 || true
   tz=$(host_timezone)
   if [ -n "$tz" ]; then adb_sh setprop persist.sys.timezone "$tz" >/dev/null 2>&1 || true; fi
   read -r w h dpi <<<"$(emu_geometry)"

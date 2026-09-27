@@ -36,13 +36,30 @@ was measured there over SSH while the operator used it.
   is what an EditText needs to focus; a WebView (Chromium) drops that combination
   (`handled=false`). Cursorwerx now hit-tests on DOWN, looking through its own pointer
   shroud, and sends a press over a WebView as a finger. Sign-in and "Show password" work.
-- **Play services floods the system log.** `AppOps: Could not forward noteOp of 108
-  (FINE_LOCATION_SOURCE) to com.google.android.gms/fused_location_provider`, a 15-line
-  stack trace up to 300 times a second, on both Macs, whenever GMS's process holding the
-  async-noted callback has died. `am force-stop com.google.android.gms` silences it for
-  minutes only; `appops set ... FINE_LOCATION_SOURCE ignore` does not take. Not fixed;
-  the log buffer is 32 MiB now so it no longer hides everything else. A candidate is
-  disabling the Google apps ATAK does not need, which also frees guest memory.
+- **Play services floods the system log; it is off now.** `AppOps: Could not forward
+  noteOp of 108 (FINE_LOCATION_SOURCE) to com.google.android.gms/fused_location_provider`
+  and the same for `network_location_provider`, a 15-line stack trace each, on both
+  Macs. GMS's two location providers hold PASSIVE listeners with no minimum interval, so
+  every GNSS fix (ATAK asks for one a second; the HAL emits three) is noted against GMS,
+  and the async-noted callback of a GMS process that has since restarted fails with
+  `DeadObjectException`. `am force-stop com.google.android.gms` silences it for minutes;
+  `appops set ... FINE_LOCATION_SOURCE ignore` does not take. `pm disable-user` on
+  `com.google.android.gms` ends it: the MacBook's log went from 3060 lines per 10 s to
+  66, the flood to zero, 140 MiB freed, ATAK's GPS fix time still advancing (the GNSS
+  service is Android's, not GMS's), Chrome still opening pages with no dialog, one
+  `GoogleApiAvailability: ConnectionResult=3` warning at Chrome start. Lost: signing
+  into a Google account inside Chrome. GMS is first in `EMU_TRIM_APPS`; take it out of
+  the list in the config to keep it.
+- **SystemUI must restart after provisioning, every boot.** It starts before takwerx
+  can set ANGLE's `warmUpPipelineCacheAtLink` override (a debug property, gone at each
+  boot), and without it HWUI's shaders fail to compile on MoltenVK: `skia: Shader
+  compilation error` plus libEGL, 70 lines a second, and the same `createPipeline`
+  failure preceded the MacBook's display-stack restart. Restarting SystemUI after the
+  override took it to zero on the Studio. The restart also settles the toast theme
+  (above), so provisioning now always kills SystemUI after the override and the
+  dark-mode switch: two seconds of status bar at boot, before ATAK is launched. What is
+  left in a quiet log: ATAK's own `MapGroupHierarchyListItem` (26 lines a second while
+  the overlay list is open) and the GNSS HAL's debug lines (4 a second).
 - **The stock Google apps are off; Chrome stays.** The operator wants only Chrome in
   the dock. Provisioning now `pm disable-user`s Gmail, YouTube, YouTube Music, Photos,
   Messages, Phone, the Google app, Wellbeing, Maps, Docs, Calendar, Contacts, Clock,
