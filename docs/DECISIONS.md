@@ -55,7 +55,12 @@ desktop shortcuts. Measured and decided on the way:
   already runs. Measured on the Mac with the copy's tag set back to r11: stopped, rebuilt at
   r12, booted, ATAK back in a new process. Re-signing the app under a running emulator is
   safe: `codesign --force` writes a new file (inode 71515023 to 71522233) and the running
-  process kept its own, alive and answering 60 s later.
+  process kept its own, alive and answering 60 s later. Measured on the Dell, updating from
+  0.2.0 (whose watcher recorded no version): "Restarting Android under takwerx 0.2.0" at
+  16:44:20, clean stop, emulator started 16:44:29, Android up 16:44:51, ATAK back with its
+  focus fix at 16:45:15, and no permission prompt. The old updater still printed its
+  "takwerx restart loads the new one" line after the new init had restarted everything; it
+  is gone from the updater that ships next.
 - **ATAK asked for file access again after a restart on the Dell.** Android keeps granted
   permissions across a reboot, so the cause is not known yet; ATAK's permissions are now
   granted again at every boot on both engines (one adb round trip on the Mac, 1 s).
