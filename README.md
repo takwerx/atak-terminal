@@ -1,18 +1,24 @@
 # takwerx: ATAK on your desktop
 
 Real ATAK, the Android app with its real plugins, running in a window on your Mac.
-One command installs it. After that there is an **ATAK** icon in Applications and
-you open it like any other app.
+Two steps install it. After that there is a **TAKwerx ATAK Terminal** icon in
+Applications and you open it like any other app.
+
+1. **Download ATAK-CIV first** from [tak.gov](https://tak.gov/products/atak-civ)
+   (it needs a free login). Leave the file in Downloads.
+2. Paste this line in Terminal:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/takwerx/takwerx-desktop/main/install.sh | bash
 ```
 
-That line downloads the tool, builds a small Linux virtual machine, starts Android
-inside it, installs the ATAK APK you already have in Downloads, adds the TAKWERX
-Market plugin so your plugins update from inside ATAK, creates the icon, and opens
-the window. First run takes a few minutes and about 2 GB of downloads. After that,
-opening ATAK takes about half a minute.
+That line downloads the tool and Google's Android emulator, starts Android on your
+Mac's GPU, installs the ATAK APK from Downloads (or opens a file picker so you can
+point at it), adds the TAKWERX Market plugin so your plugins update from inside
+ATAK, creates the icon, and opens the window. First run takes a few minutes and
+about 2 GB of downloads. After that, opening ATAK takes about half a minute.
+
+If you skipped step 1, the icon asks for the APK the first time you open it.
 
 There is no account, no telemetry, no paid tier, and nothing is sent anywhere.
 Everything runs on your own machine.
@@ -21,7 +27,8 @@ Everything runs on your own machine.
 
 - A Mac with Apple Silicon or Intel, macOS 13 or newer. Windows and Linux are next.
 - The ATAK-CIV APK from [tak.gov](https://tak.gov/products/atak-civ). ATAK is not
-  redistributed here; you download it once and takwerx installs it.
+  redistributed here and cannot be fetched for you; you download it once and takwerx
+  installs it.
 - About 10 GB of disk and an internet connection for the first run.
 
 Nothing else. No Homebrew, no Docker, no Android Studio, no developer account.
@@ -51,7 +58,7 @@ takwerx up                  start Android and open the ATAK window
 takwerx down                stop Android and the VM, keep all data
 takwerx status              what is running
 
-takwerx apk [FILE]          install or replace ATAK (newest in ~/Downloads by default)
+takwerx apk [FILE]          install or replace ATAK (newest in ~/Downloads, else a file picker)
 takwerx plugin FILE.apk     install a plugin
 takwerx market              install the TAKWERX Market plugin for your ATAK version
 takwerx datapackage FILE    import a data package zip
@@ -75,7 +82,8 @@ Plugins from TAKWERX update from inside ATAK through the Market plugin, which
 `init` installs to match your ATAK version. Any other plugin: `takwerx plugin file.apk`.
 
 ATAK itself cannot be fetched automatically, because tak.gov requires a login.
-Download the new APK, then `takwerx apk` picks up the newest one in Downloads.
+Download the new APK, then `takwerx apk` picks up the newest one in Downloads, or
+opens a file picker if there is none.
 Your settings and plugins stay.
 
 ## Position
@@ -159,7 +167,7 @@ lets only the VM reach adb; nothing else on your network can.
 | Android data | a volume inside the VM; `takwerx reset` wipes it |
 | Settings | `~/.takwerx/config` |
 | Logs | `~/.takwerx/logs` |
-| The icon | `/Applications/ATAK.app` |
+| The icon | `/Applications/TAKwerx ATAK Terminal.app` |
 
 `takwerx uninstall` removes all of it.
 

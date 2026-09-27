@@ -2,6 +2,46 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-26, late night: how it installs, decided
+
+The operator's call: no Apple Developer ID ("not paying Apple"), so no notarized
+disk image; the install stays the one Terminal line, and everything after it is
+clicks. The one thing takwerx cannot do is fetch ATAK: tak.gov is behind a login,
+and the official GitHub releases of ATAK-CIV carry SDK zips only, no APK (checked
+2026-09-26, 4.6.0.5 is the newest there). So the instructions say "download ATAK
+first", and every path that needs the APK and cannot find one in Downloads opens a
+native file picker (`atak_pick`, `choose file` via osascript; zenity on Linux):
+`takwerx init`, `takwerx apk`, and the app icon, which shows a dialog with "Open
+tak.gov" and "Choose the APK" first (`atak_ask_pick`) and then installs and launches
+ATAK in one go. Cancel is handled: the picker returns nothing and the message says
+what to do. Anything that downloads by click (an app, a dmg, a "web installer") gets
+quarantined, and macOS 15 dropped right-click-open, so curl is the clean path, not
+the compromise.
+
+- **The app is "TAKwerx ATAK Terminal"** (was ATAK.app; an old bundle with our
+  identifier is removed by `app_build`; `takwerx app` rebuilds the icon on demand).
+- **Its icon is ATAK's own**, taken from the APK on the user's disk at build time, the
+  largest `ic_atak_launcher.png` in it (96 px in 5.8; the Dock draws 64 to 128 px, so it
+  is sharp there and soft in Launchpad). Nothing of ATAK's is shipped. Before ATAK is
+  installed the takwerx icon is used; `takwerx app` after `takwerx apk` swaps it.
+- **Pinned to the Dock once** at build (`persistent-apps`, then the Dock restarts).
+- **The running emulator is "TAKwerx ATAK Terminal" too, in the Dock and at the top
+  left of the screen**, where it said qemu-system-aarch64: macOS names a process after
+  its bundle, or after the executable file when there is none, and the binary has no
+  bundle and no embedded Info.plist. The launcher execs that file at a fixed path, so
+  the file is now a two-line shell script that execs the real binary from inside a
+  bundle built next to it (`emu_bundle`, with the ATAK icon, signed with the binary's
+  own entitlements). Measured on the Studio: a symlink into the bundle is not enough
+  (macOS goes by the path exec'd: still qemu-system-aarch64, though the emulator ran);
+  the script first failed with `dyld: Library not loaded: @rpath/libandroid-emu-tracing`
+  because macOS strips `DYLD_*` from the environment when it runs a system binary such
+  as /bin/sh, and the launcher passes its libraries in `DYLD_LIBRARY_PATH`; the script
+  sets that path again from `ANDROID_EMULATOR_LAUNCHER_DIR` (`lib64/qt/lib`,
+  `lib64/vulkan`, `lib64/gles_angle`, `lib64`), and then System Events reports
+  displayed name "TAKwerx ATAK Terminal", bundle `com.takwerx.atak-terminal`, and
+  Android boots. Two Dock tiles while running, the pinned app and the emulator, both
+  with the same name and icon; merging them would need the launcher to be the process.
+
 ## 2026-09-26, laptop night: what the MacBook found that the Studio had not
 
 First full run on a 16 GiB M2 Pro MacBook Pro (2864x1838 at 400 dpi). Everything below

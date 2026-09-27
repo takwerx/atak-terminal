@@ -8,7 +8,7 @@ LIMACTL="$LIMA_DIR/bin/limactl"
 SCRCPY_BIN="$SCRCPY_DIR/scrcpy"
 SOCKET_VMNET_BIN=/opt/socket_vmnet/bin/socket_vmnet
 LIMA_SUDOERS=/private/etc/sudoers.d/lima
-APP_NAME="ATAK"
+APP_NAME="TAKwerx ATAK Terminal"
 if [ -w /Applications ]; then APP_DIR="/Applications/$APP_NAME.app"; else APP_DIR="$HOME/Applications/$APP_NAME.app"; fi
 
 host_check() {
@@ -138,7 +138,10 @@ bridged_remove() {
 # signing. scrcpy is copied inside it so the ATAK window carries this icon in the Dock.
 app_build() {
   step "Creating $APP_DIR"
-  local mac="$APP_DIR/Contents/MacOS" res="$APP_DIR/Contents/Resources"
+  local mac="$APP_DIR/Contents/MacOS" res="$APP_DIR/Contents/Resources" old
+  # An earlier takwerx named the bundle ATAK.app; one with our identifier is replaced.
+  old="$(dirname "$APP_DIR")/ATAK.app"
+  if [ -d "$old" ] && grep -q com.takwerx.atak-desktop "$old/Contents/Info.plist" 2>/dev/null; then rm -rf "$old"; fi
   mkdir -p "$mac" "$res"
   cat >"$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -176,20 +179,46 @@ LAUNCHER
   codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
   touch "$APP_DIR"
   ok "$APP_NAME.app ready"
+  app_dock_add
+}
+
+# The icon is ATAK's own launcher art, taken from the APK the user downloaded (never
+# shipped here): the largest ic_atak_launcher.png in it, 96 px in ATAK 5.8, which the
+# Dock draws at 64 to 128 px. Before ATAK is installed, or if the APK has no such file,
+# the takwerx icon (assets/icon.svg) is used.
+app_icon_source() {
+  local apk entry
+  apk=$(config_get ATAK_APK ""); [ -f "$apk" ] || apk=$(find_atak_apk)
+  [ -f "${apk:-}" ] || return 1
+  entry=$(unzip -l "$apk" 2>/dev/null | awk '$4 ~ /ic_atak_launcher\.png$/ {print $1, $4}' | sort -rn | head -n1 | cut -d' ' -f2)
+  [ -n "$entry" ] || return 1
+  unzip -p "$apk" "$entry" >"$TAKWERX_STATE/icon/source.png" 2>/dev/null && [ -s "$TAKWERX_STATE/icon/source.png" ]
 }
 
 app_icon() {
-  local out=$1 src="$TAKWERX_APP/assets/icon.svg" work="$TAKWERX_STATE/icon" s
+  local out=$1 src="$TAKWERX_APP/assets/icon.svg" work="$TAKWERX_STATE/icon" s png
   rm -rf "$work"; mkdir -p "$work/icon.iconset"
-  if ! qlmanage -t -s 1024 -o "$work" "$src" >/dev/null 2>&1 || [ ! -f "$work/icon.svg.png" ]; then
+  if app_icon_source; then
+    png="$work/source.png"
+  elif qlmanage -t -s 1024 -o "$work" "$src" >/dev/null 2>&1 && [ -f "$work/icon.svg.png" ]; then
+    png="$work/icon.svg.png"
+  else
     warn "Could not render the icon; the app keeps the default icon"
     return 0
   fi
   for s in 16 32 128 256 512; do
-    sips -z "$s" "$s" "$work/icon.svg.png" --out "$work/icon.iconset/icon_${s}x${s}.png" >/dev/null 2>&1
-    sips -z $((s*2)) $((s*2)) "$work/icon.svg.png" --out "$work/icon.iconset/icon_${s}x${s}@2x.png" >/dev/null 2>&1
+    sips -z "$s" "$s" "$png" --out "$work/icon.iconset/icon_${s}x${s}.png" >/dev/null 2>&1
+    sips -z $((s*2)) $((s*2)) "$png" --out "$work/icon.iconset/icon_${s}x${s}@2x.png" >/dev/null 2>&1
   done
   iconutil -c icns "$work/icon.iconset" -o "$out" 2>/dev/null || warn "iconutil failed; default icon kept"
+}
+
+# Pins the app to the Dock once. The Dock restarts to pick it up (a second of blank Dock).
+app_dock_add() {
+  defaults read com.apple.dock persistent-apps 2>/dev/null | grep -q "$APP_DIR" && return 0
+  defaults write com.apple.dock persistent-apps -array-add "<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>file://$APP_DIR/</string><key>_CFURLStringType</key><integer>15</integer></dict></dict></dict>" >/dev/null 2>&1 || return 0
+  killall Dock >/dev/null 2>&1 || true
+  ok "$APP_NAME is in the Dock"
 }
 
 app_remove() { rm -rf "$APP_DIR"; }

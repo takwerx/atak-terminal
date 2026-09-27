@@ -133,7 +133,7 @@ emu_prepare() {
     *) die "EMU_VK must be moltenvk or kosmickrisp (is '$EMU_VK')" ;;
   esac
   # The trailing tag is this function's own revision: bump it when the copy is built differently.
-  want="emulator $EMULATOR_VERSION, moltenvk $MOLTENVK_VERSION, r7"
+  want="emulator $EMULATOR_VERSION, moltenvk $MOLTENVK_VERSION, r8"
   if [ "$(tool_version "$EMU_DIR")" != "$want" ]; then
     step "Preparing the GPU emulator ($want)"
     rm -rf "$EMU_DIR"
@@ -141,8 +141,63 @@ emu_prepare() {
     cp -f "$EMU_MVK_LIB" "$EMU_DIR/lib64/vulkan/libMoltenVK.dylib" || die "Could not install MoltenVK into the emulator"
     if [ -f "$EMU_KK_LIB" ]; then cp -f "$EMU_KK_LIB" "$EMU_DIR/lib64/vulkan/libvulkan_kosmickrisp.dylib" || true; fi
     emu_retitle
+    emu_bundle
     printf '%s\n' "$want" >"$EMU_DIR/.version"
   fi
+}
+
+# macOS names a running program after its app bundle, or after the executable file when
+# there is none: "qemu-system-aarch64" in the Dock and at the top left of the screen. The
+# launcher execs that file at a fixed path, so the file becomes a two-line shell script
+# that execs the real binary from inside "TAKwerx ATAK Terminal.app" next to it, built
+# here with the ATAK icon. A symlink into the bundle is not enough: macOS goes by the
+# path exec'd, not where it leads (tried 2026-09-26). The launcher's DYLD_LIBRARY_PATH
+# does not survive /bin/sh, which macOS strips of DYLD_* as a system binary, so the
+# script sets it again from the launcher directory; without it dyld cannot find
+# libandroid-emu-tracing. The bundle is signed with the same entitlements as the binary.
+emu_bundle() {
+  local dir="$EMU_DIR/qemu/darwin-aarch64" app bin ent="$TAKWERX_STATE/emulator.entitlements"
+  bin="$dir/qemu-system-aarch64"; app="$dir/$APP_NAME.app"
+  [ -s "$ent" ] || { warn "No entitlements to sign with; the Dock keeps saying qemu-system-aarch64"; return 0; }
+  mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+  cat >"$app/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleName</key><string>$APP_NAME</string>
+  <key>CFBundleDisplayName</key><string>$APP_NAME</string>
+  <key>CFBundleIdentifier</key><string>com.takwerx.atak-terminal</string>
+  <key>CFBundleExecutable</key><string>qemu-system-aarch64</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleIconFile</key><string>icon</string>
+  <key>CFBundleVersion</key><string>$TAKWERX_VERSION</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict></plist>
+PLIST
+  mv -f "$bin" "$app/Contents/MacOS/qemu-system-aarch64" || die "Could not move the emulator into its bundle"
+  cat >"$bin" <<WRAP
+#!/bin/sh
+# Written by takwerx. Starts the emulator from inside its app bundle, so macOS names it
+# and draws its icon from the bundle instead of showing "qemu-system-aarch64". The
+# launcher's DYLD_LIBRARY_PATH does not survive /bin/sh (macOS strips DYLD_* for system
+# binaries), so it is set again here from the launcher directory.
+E=\${ANDROID_EMULATOR_LAUNCHER_DIR:-\$(cd "\$(dirname "\$0")/../.." && pwd)}
+export DYLD_LIBRARY_PATH="\$E/lib64/qt/lib:\$E/lib64/vulkan:\$E/lib64/gles_angle:\$E/lib64"
+exec "\$(dirname "\$0")/$APP_NAME.app/Contents/MacOS/qemu-system-aarch64" "\$@"
+WRAP
+  chmod +x "$bin"
+  app_icon "$app/Contents/Resources/icon.icns"
+  codesign --force --sign - --options runtime --entitlements "$ent" "$app" >/dev/null 2>&1 \
+    || warn "Could not sign the emulator bundle; it may not start"
+}
+
+# The bundle's icon follows ATAK: rebuilt after an APK install (takwerx apk), when the
+# art becomes available, without rebuilding the emulator copy.
+emu_bundle_icon() {
+  local app="$EMU_DIR/qemu/darwin-aarch64/$APP_NAME.app" ent="$TAKWERX_STATE/emulator.entitlements"
+  [ -d "$app" ] || return 0
+  app_icon "$app/Contents/Resources/icon.icns"
+  codesign --force --sign - --options runtime --entitlements "$ent" "$app" >/dev/null 2>&1 || true
 }
 
 # The window is titled from one format string, "%s Emulator - %s:%d" (product, AVD, port).

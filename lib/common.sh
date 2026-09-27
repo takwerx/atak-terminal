@@ -105,6 +105,37 @@ alert() {
   esac
 }
 
+# A native file picker for the ATAK-CIV APK, the one thing takwerx cannot fetch itself
+# (tak.gov, behind a login; the official GitHub releases carry no APK). Prints the path,
+# or nothing when the user cancels or picks something that is not an APK.
+atak_pick() {
+  local f=""
+  case "$HOST_OS" in
+    macos) f=$(osascript -e 'POSIX path of (choose file with prompt "Pick the ATAK-CIV APK you downloaded from tak.gov" default location (path to downloads folder))' 2>/dev/null || true) ;;
+    linux) command -v zenity >/dev/null 2>&1 && f=$(zenity --file-selection --title="Pick the ATAK-CIV APK you downloaded from tak.gov" --filename="$HOME/Downloads/" 2>/dev/null || true) ;;
+  esac
+  f=${f%$'\n'}
+  [ -n "$f" ] || return 0
+  case "$f" in
+    *.apk) printf '%s\n' "$f" ;;
+    *) warn "$(basename "$f") is not an APK; nothing installed" ;;
+  esac
+}
+
+# The app icon's version: a dialog first, so the picker does not appear out of nowhere.
+atak_ask_pick() {
+  local b
+  case "$HOST_OS" in
+    macos)
+      b=$(osascript -e 'button returned of (display dialog "ATAK is not installed yet.\n\nDownload ATAK-CIV from tak.gov (it needs a login), then pick the file here." with title "TAKwerx ATAK Terminal" buttons {"Open tak.gov", "Choose the APK"} default button 2 with icon note)' 2>/dev/null || true)
+      case "$b" in
+        "Choose the APK") atak_pick ;;
+        "Open tak.gov") open "https://tak.gov/products/atak-civ" >/dev/null 2>&1 || true; atak_pick ;;
+      esac ;;
+    *) atak_pick ;;
+  esac
+}
+
 # download URL DEST: skips when DEST already exists, shows progress on a terminal.
 download() {
   local url=$1 dest=$2

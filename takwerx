@@ -40,6 +40,7 @@ takwerx $TAKWERX_VERSION: ATAK on your desktop
   takwerx apk [FILE]          install or replace ATAK (defaults to the newest in ~/Downloads)
   takwerx plugin FILE         install a plugin APK
   takwerx market              install the TAKWERX Market plugin matching your ATAK
+  takwerx app                 rebuild the app icon in Applications (name, icon, launcher)
   takwerx datapackage FILE    import a data package zip
   takwerx display PRESET      screen (emulator: fit this Mac's screen) | ultra | tablet | desktop | phone | WIDTHxHEIGHT@DPI
   takwerx location WHERE      LAT,LON [ACCURACY_M] | here (this Mac's location) | ip (rough) | off
@@ -135,8 +136,12 @@ cmd_init() {
   if [ -z "$apk" ] && ! atak_installed; then
     a=$(find_atak_apk)
     if [ -n "$a" ] && confirm "Found $(basename "$a") in Downloads. Install it?"; then apk=$a; fi
+    if [ -z "$apk" ]; then
+      say "ATAK-CIV comes from https://tak.gov/products/atak-civ (login needed). A file picker opens now; cancel it if you have not downloaded it yet."
+      apk=$(atak_pick)
+    fi
   fi
-  if [ -n "$apk" ]; then atak_install "$apk"; market_install; fi
+  if [ -n "$apk" ]; then atak_install "$apk"; market_install; icons_refresh; fi
   if [ -z "$(config_get LOCATION)" ]; then
     step "Position for ATAK's self marker"
     if pos=$(ip_location); then
@@ -147,7 +152,7 @@ cmd_init() {
     fi
   fi
   if ! atak_installed; then
-    printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ then run:\n  takwerx apk ~/Downloads/ATAK-CIV-x.y.z.apk\n' "$BOLD" "$NC"
+    printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ, then open %s.app: it asks for the file. Or: takwerx apk\n' "$BOLD" "$NC" "$APP_NAME"
   fi
   printf '\n%sDone.%s %s.app is in %s; new terminals have the takwerx command.\n' "$GREEN" "$NC" "$APP_NAME" "$(dirname "$APP_DIR")"
   if [ "$open" = 1 ]; then cmd_up; fi
@@ -163,11 +168,15 @@ init_emulator() {
   if [ -z "$apk" ] && ! atak_installed; then
     a=$(find_atak_apk)
     if [ -n "$a" ] && confirm "Found $(basename "$a") in Downloads. Install it?"; then apk=$a; fi
+    if [ -z "$apk" ]; then
+      say "ATAK-CIV comes from https://tak.gov/products/atak-civ (login needed). A file picker opens now; cancel it if you have not downloaded it yet."
+      apk=$(atak_pick)
+    fi
   fi
-  if [ -n "$apk" ]; then atak_install "$apk"; market_install; fi
+  if [ -n "$apk" ]; then atak_install "$apk"; market_install; icons_refresh; fi
   location_refresh
   if ! atak_installed; then
-    printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ then run:\n  takwerx apk ~/Downloads/ATAK-CIV-x.y.z.apk\n' "$BOLD" "$NC"
+    printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ, then open %s.app: it asks for the file. Or: takwerx apk\n' "$BOLD" "$NC" "$APP_NAME"
   fi
   printf '\n%sDone.%s %s.app is in %s; new terminals have the takwerx command.\n' "$GREEN" "$NC" "$APP_NAME" "$(dirname "$APP_DIR")"
   if [ "$open" = 1 ]; then cmd_up; fi
@@ -186,8 +195,16 @@ cmd_up() {
       if [ "$(runtime)" = emulator ]; then emu_focus_fix; fi
     fi
   else
-    warn "ATAK is not installed yet: takwerx apk /path/to/ATAK.apk"
-    if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then alert "ATAK is not installed yet. Download it from tak.gov and run: takwerx apk <file>"; fi
+    # From the icon: a dialog and the file picker, then straight on into ATAK.
+    local apk=""
+    if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then apk=$(atak_ask_pick); else apk=$(find_atak_apk); fi
+    if [ -n "$apk" ]; then
+      atak_install "$apk"; market_install; icons_refresh; atak_launch
+      if [ "$(runtime)" = emulator ]; then emu_focus_fix; fi
+    else
+      warn "ATAK is not installed yet: takwerx apk (opens a file picker)"
+      if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then notify "ATAK is not installed. Open the app again when the APK is downloaded."; fi
+    fi
   fi
   if [ "$window" = 1 ]; then
     if [ "$(runtime)" = emulator ]; then emu_front; else window_open; fi
@@ -232,10 +249,12 @@ cmd_down() {
 cmd_apk() {
   local apk=${1:-}
   if [ -z "$apk" ]; then apk=$(find_atak_apk); fi
-  [ -n "$apk" ] || die "No ATAK APK given and none found in ~/Downloads"
+  if [ -z "$apk" ]; then apk=$(atak_pick); fi
+  [ -n "$apk" ] || die "No ATAK APK given, none in ~/Downloads, and nothing picked"
   android_up
   atak_install "$apk"
   market_install
+  icons_refresh
   say "Run 'takwerx up' to open it."
 }
 
@@ -245,6 +264,9 @@ cmd_plugin() {
   if [ "$(runtime)" = emulator ]; then emu_plugins_enable; fi
 }
 cmd_market()      { android_up; market_install; }
+cmd_app()         { app_build; if [ "$(runtime)" = emulator ]; then emu_bundle_icon; fi; }
+# After ATAK lands, both icons (the app in Applications, the running emulator) take its art.
+icons_refresh()   { app_build; if [ "$(runtime)" = emulator ]; then emu_bundle_icon; fi; }
 cmd_datapackage() { [ -n "${1:-}" ] || die "Usage: takwerx datapackage FILE.zip"; android_up; datapackage_install "$1"; }
 cmd_display() {
   [ -n "${1:-}" ] || die "Usage: takwerx display screen|ultra|tablet|desktop|phone|WxH@DPI"
@@ -439,6 +461,7 @@ main() {
     apk)         cmd_apk "$@" ;;
     plugin)      cmd_plugin "$@" ;;
     market)      cmd_market ;;
+    app)         cmd_app ;;
     datapackage) cmd_datapackage "$@" ;;
     display)     cmd_display "$@" ;;
     location)    cmd_location "$@" ;;
