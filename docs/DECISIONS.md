@@ -18,16 +18,19 @@ what to do. Anything that downloads by click (an app, a dmg, a "web installer") 
 quarantined, and macOS 15 dropped right-click-open, so curl is the clean path, not
 the compromise.
 
-- **Team preview ships as a zip, the repository stays private** (operator, 2026-09-26
-  night: "ready to share to my small team to get some feedback"). The zip is the
-  repository at HEAD and nothing else: no ATAK APK ever, and no plugins either, by the
-  operator's call ("it only needs one plugin, the Market"): init installs the Market and
-  the rest comes through it inside ATAK. Install is
-  `bash ~/Downloads/takwerx-desktop/takwerx init`, which is what the MacBook did
-  earlier tonight. Dragging an APK onto the window also installs it and ATAK offers to
-  load it ("dragging is so clutch"), which is the answer for any plugin outside the
-  Market. Cursorwerx, which carries the mouse fixes, is not in the Market yet. The curl
-  line in the README waits for the repository to go public.
+- **Public, as a beta** (operator, 2026-09-26 night, minutes after asking for a team
+  zip: "lets just make this an open github public project its beta for now"). So the
+  README's curl line is the install, the repository carries every instruction, and
+  the zip is gone. Before the flip the tracked files were scanned: no APK was ever
+  committed, no private addresses or account names. The README was rewritten for the
+  emulator runtime it had grown past (it still described the VM, NMEA and keyboard
+  modes of redroid), and `reset`, `uninstall`, `keyboard`, `network` and `logs
+  --container` were given emulator behaviour so the command list is true. Mac only
+  for now; Windows is next ("we will work on windows tomorrow"). Plugins come through
+  the Market inside ATAK ("it only needs one plugin, the Market"), or by dragging an
+  APK onto the window, which the emulator installs and ATAK offers to load ("dragging
+  is so clutch"). Cursorwerx, which carries the mouse fixes, is not in the Market
+  yet. Prompts read /dev/tty, so `curl | bash` can ask for the SDK licence.
 - **The app is "TAKwerx ATAK Terminal"** (was ATAK.app; an old bundle with our
   identifier is removed by `app_build`; `takwerx app` rebuilds the icon on demand).
 - **Its icon is ATAK's own**, taken from the APK on the user's disk at build time, the

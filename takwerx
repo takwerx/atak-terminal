@@ -51,7 +51,7 @@ takwerx $TAKWERX_VERSION: ATAK on your desktop
   takwerx shell               adb shell into Android
   takwerx vm-shell            shell into the Linux VM
   takwerx screenshot [FILE]   save a PNG of the Android screen
-  takwerx logs [--android|--container]
+  takwerx logs [--android|--container]   takwerx log; logcat; Android boot (the emulator's own log)
   takwerx doctor              check the host and report what is missing
   takwerx reset               wipe Android (ATAK settings, certs, maps); keeps the VM
   takwerx update              update takwerx and its pinned tools
@@ -305,6 +305,7 @@ cmd_location() {
 }
 
 cmd_keyboard() {
+  [ "$(runtime)" = emulator ] && [ -n "${1:-}" ] && die "Keyboard modes are for the redroid runtime; on the emulator the Mac keyboard just works"
   case "${1:-}" in
     auto|uhid|sdk) config_set KEYBOARD_MODE "$1"; ok "Keyboard mode: $1. Close and reopen the ATAK window to apply" ;;
     "") printf 'Keyboard mode: %s\n' "$(config_get KEYBOARD_MODE auto)" ;;
@@ -314,6 +315,7 @@ cmd_keyboard() {
 
 cmd_network() {
   local mode=${1:-}
+  [ "$(runtime)" = emulator ] && die "Network modes are for the redroid runtime; the emulator is always behind NAT (no multicast)"
   require_installed
   case "$mode" in
     bridged)
@@ -388,6 +390,13 @@ cmd_doctor() {
 cmd_reset() {
   require_installed
   confirm "This wipes Android: ATAK settings, server connections, certificates, maps and plugins. Continue?" || { say "Cancelled."; return 0; }
+  if [ "$(runtime)" = emulator ]; then
+    emu_running && emu_stop
+    rm -rf "$EMU_AVD_HOME/$EMU_AVD.avd" "$EMU_AVD_HOME/$EMU_AVD.ini"
+    config_unset ATAK_APK; config_unset MARKET_APK
+    ok "Android wiped. 'takwerx up' starts clean, then 'takwerx apk' reinstalls ATAK"
+    return 0
+  fi
   vm_start
   container_stop
   container_remove
@@ -410,7 +419,8 @@ cmd_update() {
 }
 
 cmd_uninstall() {
-  confirm "Remove the VM, Android and everything under $TAKWERX_ROOT, plus $APP_DIR?" || { say "Cancelled."; return 0; }
+  confirm "Remove Android and everything under $TAKWERX_ROOT, plus $APP_DIR?" || { say "Cancelled."; return 0; }
+  if emu_running; then emu_stop; fi
   if [ -x "$LIMACTL" ]; then vm_delete; fi
   app_remove
   bridged_remove
@@ -434,7 +444,8 @@ cmd_runtime() {
 cmd_logs() {
   case "${1:-}" in
     --android)   android_online || die "Android is not running"; adb_ logcat -d -t 500 ;;
-    --container) vm_running || die "VM is not running"; container_logs 300 ;;
+    --container)
+      if [ "$(runtime)" = emulator ]; then tail -n 300 "$TAKWERX_LOGS/emulator.log"; else vm_running || die "VM is not running"; container_logs 300; fi ;;
     *) tail -n 100 "$LOG_FILE" ;;
   esac
 }

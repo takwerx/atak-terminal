@@ -257,7 +257,25 @@ app_dock_add() {
   if [ "$had" -gt 1 ]; then ok "$APP_NAME is in the Dock once (was $had times)"; else ok "$APP_NAME is in the Dock"; fi
 }
 
-app_remove() { rm -rf "$APP_DIR"; }
+# Takes the app's tiles out of the Dock (same mechanics as app_dock_add), then the app.
+app_dock_remove() {
+  local plist="$TAKWERX_STATE/dock.plist" i=0 u had=0
+  mkdir -p "$TAKWERX_STATE"
+  defaults export com.apple.dock "$plist" 2>/dev/null || return 0
+  while /usr/libexec/PlistBuddy -c "Print :persistent-apps:$i" "$plist" >/dev/null 2>&1; do i=$((i + 1)); done
+  i=$((i - 1))
+  while [ "$i" -ge 0 ]; do
+    u=$(/usr/libexec/PlistBuddy -c "Print :persistent-apps:$i:tile-data:file-data:_CFURLString" "$plist" 2>/dev/null || true)
+    case "$u" in
+      *TAKwerx%20ATAK%20Terminal.app*) /usr/libexec/PlistBuddy -c "Delete :persistent-apps:$i" "$plist" >/dev/null 2>&1; had=$((had + 1)) ;;
+    esac
+    i=$((i - 1))
+  done
+  if [ "$had" -gt 0 ]; then defaults import com.apple.dock "$plist" 2>/dev/null && killall Dock >/dev/null 2>&1 || true; fi
+  rm -f "$plist"
+}
+
+app_remove() { app_dock_remove; rm -rf "$APP_DIR"; }
 
 host_doctor() {
   local ver; ver=$(sw_vers -productVersion)
