@@ -31,6 +31,20 @@ the compromise.
   APK onto the window, which the emulator installs and ATAK offers to load ("dragging
   is so clutch"). Cursorwerx, which carries the mouse fixes, is not in the Market
   yet. Prompts read /dev/tty, so `curl | bash` can ask for the SDK licence.
+- **First fresh install from the public line, MacBook, 23:18 to 23:22.** Uninstall, ATAK
+  5.8.0.5 "civSmall" in Downloads, the curl line: tools, emulator, image and MoltenVK
+  down in a minute, Android up 31 s after start, the small build found by version and
+  installed (same package as the full one, so everything applies), Market 1.7, the
+  icon rebuilt with ATAK's art, position from the Mac, ATAK open. Two things learned:
+  (1) the Market, installed before ATAK's first run, was not registered by ATAK (no
+  `shouldLoad` entry, as found earlier for other plugins); installing it again over
+  itself while ATAK ran made ATAK load it on the spot, no restart, no question
+  (`AtakPluginRegistry: Loaded plugin ... takwerxmarket`, `shouldLoad` written true).
+  So a first install now arms a background waiter that does exactly that once ATAK is
+  past its first run (`market_register_after_first_run`). (2) Without Cursorwerx the
+  trackpad zooms the map when scrolling over the toolbar overflow, the operator's first
+  remark on the fresh install; every mouse and trackpad fix is in that plugin, and it
+  is not in the Market yet, so until it is, the APK is dragged onto the window.
 - **The app is "TAKwerx ATAK Terminal"** (was ATAK.app; an old bundle with our
   identifier is removed by `app_build`; `takwerx app` rebuilds the icon on demand).
 - **Its icon is ATAK's own**, taken from the APK on the user's disk at build time, the

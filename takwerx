@@ -79,6 +79,32 @@ android_up() {
   android_provision
 }
 
+# A plugin installed before ATAK's first run gets no "should load" entry and is skipped;
+# one installed, or installed again, while ATAK runs is registered and ATAK offers to
+# load it (2026-09-26, both measured). So on a first install the Market goes in before
+# ATAK starts, and this waits in the background for ATAK to get past its first run (its
+# preferences file exists and the loading screen is gone), then installs the Market
+# again over itself. No restart of ATAK, and the user sees ATAK's own question.
+market_register_after_first_run() {
+  local apk; apk=$(config_get MARKET_APK ""); [ -f "$apk" ] || return 0
+  (
+    local prefs=/data/data/$ATAK_PACKAGE/shared_prefs/${ATAK_PACKAGE}_preferences.xml i windows
+    "$ADB" -s "$ADB_ENDPOINT" root >/dev/null 2>&1 || exit 0
+    with_timeout 30 "$ADB" -s "$ADB_ENDPOINT" wait-for-device >/dev/null 2>&1 || true
+    for i in $(seq 1 400); do
+      sleep 3
+      atak_running || continue
+      adb_sh "[ -f $prefs ] && echo yes" 2>/dev/null | grep -q yes || continue
+      windows=$(adb_sh dumpsys window windows 2>/dev/null || true)
+      [[ $windows == *"ATAK Loading"* ]] && continue
+      sleep 10
+      "$ADB" -s "$ADB_ENDPOINT" install -r -g "$apk" >/dev/null 2>&1 && log "Market installed again after ATAK's first run, so ATAK registers it"
+      exit 0
+    done
+  ) >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+}
+
 # Latest Market release carries one APK per ATAK version; pick the one for the installed ATAK.
 market_install() {
   local ver rel url apk
@@ -173,13 +199,14 @@ init_emulator() {
       apk=$(atak_pick)
     fi
   fi
-  if [ -n "$apk" ]; then atak_install "$apk"; market_install; icons_refresh; fi
+  local first=0
+  if [ -n "$apk" ]; then atak_install "$apk"; market_install; icons_refresh; first=1; fi
   location_refresh
   if ! atak_installed; then
     printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ, then open %s.app: it asks for the file. Or: takwerx apk\n' "$BOLD" "$NC" "$APP_NAME"
   fi
   printf '\n%sDone.%s %s.app is in %s; new terminals have the takwerx command.\n' "$GREEN" "$NC" "$APP_NAME" "$(dirname "$APP_DIR")"
-  if [ "$open" = 1 ]; then cmd_up; fi
+  if [ "$open" = 1 ]; then cmd_up; if [ "$first" = 1 ]; then market_register_after_first_run; fi; fi
 }
 
 cmd_up() {
@@ -201,6 +228,7 @@ cmd_up() {
     if [ -n "$apk" ]; then
       atak_install "$apk"; market_install; icons_refresh; atak_launch
       if [ "$(runtime)" = emulator ]; then emu_focus_fix; fi
+      market_register_after_first_run
     else
       warn "ATAK is not installed yet: takwerx apk (opens a file picker)"
       if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then notify "ATAK is not installed. Open the app again when the APK is downloaded."; fi
