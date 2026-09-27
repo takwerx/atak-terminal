@@ -51,7 +51,10 @@ was measured there over SSH while the operator used it.
   After the guest RAM change and the trim the MacBook reports 1.2 GiB free instead of
   0.5; the operator: "much faster on the tiles". With System Intelligence off the taskbar
   shows only the pinned Chrome and the app in use. Files (documentsui), TTS and Play
-  services stay: ATAK's import picker, its speech, and Chrome sign-in use them.
+  services stay: ATAK's import picker, its speech, and Chrome sign-in use them. Chrome
+  is there for one job, the operator says: TAK Portal's "open in app", which hands the
+  server enrolment to ATAK over its `tak:` scheme. Checked after the trim: Chrome is
+  still the default browser and ATAK still claims `tak` and `content` links.
 - **A crash-restart of ATAK does not ask "load plugins?" here**: after the display stack
   restart, `am start` brought ATAK back with every plugin loaded and no dialog.
 
