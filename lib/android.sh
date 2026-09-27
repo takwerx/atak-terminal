@@ -7,7 +7,13 @@ with_timeout() { perl -e 'alarm shift; exec @ARGV' "$@"; }
 
 # Always the adb that ships with scrcpy, talking to takwerx's private server (see common.sh).
 ADB="$SCRCPY_DIR/adb"; export ADB
-adb_server_ensure() { with_timeout 20 "$ADB" start-server >/dev/null 2>&1 || true; }
+# With ADB_SERVER_SOCKET set (common.sh), adb treats the server as remote and refuses to
+# start one ("cannot start server on remote host"): on a fresh Mac nothing ever listened
+# on 5038 and `takwerx init` waited five minutes for a booted Android it could not see
+# (MacBook, 2026-09-26). Started with the socket variable unset, on the private port.
+adb_server_ensure() {
+  ( unset ADB_SERVER_SOCKET; ANDROID_ADB_SERVER_PORT=5038 with_timeout 20 "$ADB" start-server >/dev/null 2>&1 ) || true
+}
 adb_()   { "$ADB" -s "$ADB_ENDPOINT" "$@"; }
 adb_sh() { with_timeout 30 "$ADB" -s "$ADB_ENDPOINT" shell "$@" | tr -d '\r'; }
 
