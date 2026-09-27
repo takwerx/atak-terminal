@@ -182,8 +182,17 @@ clamp() {
 }
 
 # Newest ATAK CIV APK next to takwerx (the folder it was downloaded in) or in ~/Downloads.
+# The newest ATAK by version number, not by file date: a Downloads folder holds several
+# (this Mac had 5.1 to 5.8.0.5), and an older one copied later would otherwise win.
+# Plugins are named ATAK-Plugin-... and are never ATAK; the name must be ATAK-<version>
+# or ATAK-CIV-<version>. Same version twice: the newer file.
 find_atak_apk() {
-  ls -t "$TAKWERX_APP"/../ATAK-*civ-release.apk "$TAKWERX_APP"/ATAK-*civ-release.apk "$HOME"/Downloads/ATAK-*civ-release.apk 2>/dev/null | head -n1 || true
+  local f v
+  for f in "$TAKWERX_APP"/../*.apk "$TAKWERX_APP"/*.apk "$HOME"/Downloads/*.apk; do
+    [ -f "$f" ] || continue
+    v=$(apk_version_from_name "$f"); [ -n "$v" ] || continue
+    printf '%s\t%s\t%s\n' "$v" "$(stat -f %m "$f" 2>/dev/null || echo 0)" "$f"
+  done | sort -t "$(printf '\t')" -k1,1V -k2,2n | tail -n1 | cut -f3- || true
 }
-# ATAK-5.8.0.4-174b425-civ-release.apk -> 5.8.0.4
-apk_version_from_name() { basename "$1" | sed -nE 's/^ATAK-([0-9]+(\.[0-9]+)+)-.*/\1/p'; }
+# ATAK-5.8.0.4-174b425-civ-release.apk or ATAK-CIV-5.8.0.4-...apk -> 5.8.0.4; plugins -> nothing
+apk_version_from_name() { basename "$1" | sed -nE 's/^[Aa][Tt][Aa][Kk]-([Cc][Ii][Vv]-)?([0-9]+(\.[0-9]+)+)[-.].*[Cc][Ii][Vv].*\.apk$/\2/p'; }
