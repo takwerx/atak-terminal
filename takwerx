@@ -34,6 +34,7 @@ takwerx $TAKWERX_VERSION: ATAK on your desktop
   takwerx up [--no-window]                             start Android and open the ATAK window
   takwerx down                                         stop Android and the VM, keep all data
   takwerx restart                                      recreate Android (keeps data) and reopen the window
+  takwerx atak                                         restart ATAK only (if it stops responding)
   takwerx status                                       what is running, versions, network
 
   takwerx apk [FILE]          install or replace ATAK (defaults to the newest in ~/Downloads)
@@ -200,6 +201,21 @@ cmd_restart() {
   container_stop
   container_remove
   cmd_up "$@"
+}
+
+# ATAK alone, for the emulator's occasional presentation stall (DECISIONS 2026-09-26):
+# ATAK "isn't responding" while Android and the emulator are fine.
+cmd_atak() {
+  require_installed
+  android_online || die "Android is not running (takwerx up)"
+  atak_installed || die "ATAK is not installed (takwerx apk)"
+  step "Restarting ATAK"
+  atak_quit
+  adb_sh am force-stop "$ATAK_PACKAGE" >/dev/null 2>&1 || true
+  sleep 2
+  atak_launch
+  if [ "$(runtime)" = emulator ]; then emu_focus_fix; emu_front; fi
+  ok "ATAK is starting"
 }
 
 cmd_down() {
@@ -417,6 +433,7 @@ main() {
     up)          cmd_up "$@" ;;
     down)        cmd_down ;;
     restart)     cmd_restart "$@" ;;
+    atak)        cmd_atak ;;
     status)      cmd_status ;;
     doctor)      cmd_doctor ;;
     apk)         cmd_apk "$@" ;;
