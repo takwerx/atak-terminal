@@ -85,7 +85,20 @@ nailed it". What it does and why, each one a separate hour:
   minutes, this time with ATAK's UI thread in `ThreadedRenderer_syncAndDrawFrame`, so the
   host swapchain is not it either. The display-sleep case (18:55) was separate and is
   handled by keeping the display awake. Recovery is a restart of ATAK only; `takwerx atak`
-  does it, and `takwerx up` runs a watchdog that does it on ATAK's ANR. Root cause open.
+  does it, and `takwerx up` runs a watchdog that does it on ATAK's ANR.
+- **The likely root: a flood of failed Metal pipeline compiles.** MoltenVK logs
+  `Vertex attribute m_14(2) of type uint2 cannot be read using MTLAttributeFormatFloat4`
+  at 4-13 a second while the map sits idle (0 while panning, 0 with ATAK hidden), 22,756
+  in the 30 minutes before one stall. The only integer vertex input in ATAK's shaders is
+  `in int a_pattern` in `BatchGeometryAntiAliasedLines.vert`; when a batch draws with
+  that attribute array disabled, ANGLE feeds its float default, Metal rejects the
+  pipeline, the failure is not cached, and ATAK's idle re-batching retries it every
+  frame. ANGLE overrides tried, failures per 30 s idle on DOME: baseline 231,
+  `supportsVertexInputDynamicState` 114, `-supportsGraphicsPipelineLibrary` 38,
+  `preferMonolithicPipelinesOverLibraries` 163 -- single samples, none near zero, so no
+  knob. KosmicKrisp does not log these but has its own fence aborts. Lead left: the
+  Android 15 image ships a newer ANGLE, which may convert a mismatched default attribute
+  instead of failing; the operator's `atakgpu` AVD (android-35) can test it.
 - **A clean stop is ATAK's QUITAPP, `sync`, then `reboot -p`**; the emulator exits by
   itself in ~4 s. `adb emu kill` is a pulled plug and cost Feature Layer its layer list.
 - **The splash is ATAK's own supported one:** `atak/support/atak_splash.png` (under
