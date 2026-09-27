@@ -130,6 +130,10 @@ emu_sdk_layout() {
   [ -e "$EMU_SDK/platform-tools/adb" ] || ln -sfn "$ADB" "$EMU_SDK/platform-tools/adb"
 }
 
+# The trailing tag is emu_prepare's own revision: bump it when the copy is built differently.
+emu_copy_revision() { printf 'emulator %s, moltenvk %s, r12\n' "$EMULATOR_VERSION" "$MOLTENVK_VERSION"; }
+emu_copy_current()  { [ "$(tool_version "$EMU_DIR")" = "$(emu_copy_revision)" ]; }
+
 emu_prepare() {
   local want
   emu_installed || emu_sdk_install
@@ -139,8 +143,7 @@ emu_prepare() {
     kosmickrisp) [ -f "$EMU_KK_LIB" ] || die "KosmicKrisp is missing; it is Homebrew's mesa, for development only" ;;
     *) die "EMU_VK must be moltenvk or kosmickrisp (is '$EMU_VK')" ;;
   esac
-  # The trailing tag is this function's own revision: bump it when the copy is built differently.
-  want="emulator $EMULATOR_VERSION, moltenvk $MOLTENVK_VERSION, r12"
+  want=$(emu_copy_revision)
   if [ "$(tool_version "$EMU_DIR")" != "$want" ]; then
     step "Preparing the GPU emulator ($want)"
     rm -rf "$EMU_DIR"
@@ -516,6 +519,9 @@ emu_location_apply() {
 }
 
 emu_up() {
+  # After takwerx update the emulator that is already running is the old build; the new
+  # copy is made at the next start.
+  if emu_running && ! emu_copy_current; then warn "Android is running the previous emulator build; takwerx restart loads the new one"; fi
   emu_start
   if ! android_online || ! android_booted; then
     step "Waiting for Android to boot"

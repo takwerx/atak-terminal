@@ -2,6 +2,22 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-27, later: releases. Users receive tags, not the head of main
+
+Until now the install line and `takwerx update` fetched the main branch tarball, and the
+daily notice compared VERSION files that had never moved, so a fix reached people only
+if they happened to run `update`, and any push reached them the same way. Now a release
+is `./release.sh X.Y.Z` after a CHANGELOG section: it bumps VERSION, tags vX.Y.Z, pushes
+commit and tag in one atomic push, and creates the GitHub release with that section as
+its notes. VERSION on main names the newest release and the tag holds it; `install.sh`
+and `update` read VERSION from main and fetch the tag's tarball (`TAKWERX_BRANCH`
+still takes a branch, for development). So main can move between releases without
+reaching anyone, the notice fires exactly when VERSION moves, and a tester can read
+what changed before typing `update`. The notice also prints in a terminal now (`up`,
+`status`), since not everyone starts from the icon, and `emu_up` says when Android is
+still running the previous emulator build after an update (the copy is rebuilt at the
+next start, not during `update`). First release 0.1.1, the Extended Controls fix.
+
 ## 2026-09-27: the first crash from the field is the "..." button. Qt's path file, the app bundle, and Chromium's sandbox
 
 A tester's Mac mini M4 Pro (24 GB), fresh install, 76 seconds after start: the whole

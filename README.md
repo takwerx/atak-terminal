@@ -114,11 +114,17 @@ One line, in Terminal:
 takwerx update
 ```
 
-It fetches the newest takwerx, fetches any tool whose pinned version moved (the
+It fetches the newest takwerx release, fetches any tool whose pinned version moved (the
 emulator, the Android image, the graphics driver), rebuilds the app icon, and
 re-applies its Android settings to the running Android. Your Android data, ATAK,
-plugins and settings stay. Running the install line from the top of this page again
-does the same thing.
+plugins and settings stay. If Android was running, `takwerx restart` afterwards loads
+the new emulator build; takwerx says so. Running the install line from the top of this
+page again does the same thing.
+
+You hear about a new release without looking: the app icon posts a notification within
+a day of it, and `takwerx up` or `takwerx status` in a terminal prints a line until you
+update. What changed is in [CHANGELOG.md](CHANGELOG.md) and on the
+[releases page](https://github.com/takwerx/atak-terminal/releases).
 
 ATAK itself updates with `takwerx apk` after you download a new APK, and plugins
 update from the Market inside ATAK. When a newer takwerx is out, opening the app

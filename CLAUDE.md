@@ -49,6 +49,12 @@ why; do not re-derive those. Windows is next: `docs/PLAN-windows.md` is the brie
   osascript are refused here.
 - Every mouse and trackpad fix is in the Cursorwerx plugin (takwerx/cursorwerx, in the
   Market), never in the runtime.
+- Releasing: write the section in `CHANGELOG.md` (for the testers, plain words), then
+  `./release.sh X.Y.Z`. It bumps `VERSION`, tags `vX.Y.Z`, pushes both atomically and
+  creates the GitHub release from that section. Users receive tags, never the head of
+  main: `install.sh` and `takwerx update` fetch the tag named by `VERSION` on main, so
+  a push to main between releases reaches nobody, and the daily notice fires when
+  `VERSION` moves (DECISIONS 2026-09-27).
 
 ## Not done
 

@@ -136,17 +136,40 @@ atak_ask_pick() {
   esac
 }
 
-# Once a day, from the app icon: is a newer takwerx published? Three seconds at most,
-# nothing sent but the request for one small file, and silent on any failure.
+# Where takwerx comes from. Releases: the VERSION file on main names the newest one and
+# the tag v<VERSION> holds it, so a push to main between releases reaches nobody until
+# release.sh runs (DECISIONS 2026-09-27). TAKWERX_BRANCH=<branch> takes a development
+# branch instead. Prints "URL<space>description", or fails.
+takwerx_source() {
+  local repo=${TAKWERX_REPO:-takwerx/atak-terminal} ver
+  if [ -n "${TAKWERX_BRANCH:-}" ]; then
+    printf 'https://github.com/%s/archive/refs/heads/%s.tar.gz branch %s\n' "$repo" "$TAKWERX_BRANCH" "$TAKWERX_BRANCH"; return 0
+  fi
+  ver=$(curl -fsSL --max-time 10 "https://raw.githubusercontent.com/$repo/main/VERSION" 2>/dev/null | tr -d '[:space:]') || return 1
+  [ -n "$ver" ] || return 1
+  printf 'https://github.com/%s/archive/refs/tags/v%s.tar.gz release %s\n' "$repo" "$ver" "$ver"
+}
+
+# Is a newer takwerx released? The version on main is fetched once a day at most (three
+# seconds, one small file, silent on failure) and kept in the stamp file. From the app icon
+# ("notify") a notification goes out on the day the news arrives; in a terminal ("print",
+# from up and status) one line is printed for as long as the install is behind.
 update_check() {
-  local stamp="$TAKWERX_STATE/update-check" latest repo=${TAKWERX_REPO:-takwerx/atak-terminal}
-  if [ -f "$stamp" ] && [ -n "$(find "$stamp" -mtime -1 2>/dev/null)" ]; then return 0; fi
-  mkdir -p "$TAKWERX_STATE"; touch "$stamp"
-  latest=$(curl -fsSL --max-time 3 "https://raw.githubusercontent.com/$repo/main/VERSION" 2>/dev/null | tr -d '[:space:]') || return 0
+  local mode=${1:-notify} stamp="$TAKWERX_STATE/update-check" latest fresh=0 repo=${TAKWERX_REPO:-takwerx/atak-terminal}
+  mkdir -p "$TAKWERX_STATE"
+  if [ ! -f "$stamp" ] || [ -z "$(find "$stamp" -mtime -1 2>/dev/null)" ]; then
+    latest=$(curl -fsSL --max-time 3 "https://raw.githubusercontent.com/$repo/main/VERSION" 2>/dev/null | tr -d '[:space:]') || latest=""
+    printf '%s\n' "$latest" >"$stamp"; fresh=1
+  fi
+  latest=$(tr -d '[:space:]' <"$stamp" 2>/dev/null || true)
   [ -n "$latest" ] && [ "$latest" != "$TAKWERX_VERSION" ] || return 0
   [ "$(printf '%s\n%s\n' "$TAKWERX_VERSION" "$latest" | sort -V | tail -n1)" = "$latest" ] || return 0
-  notify "takwerx $latest is available (you have $TAKWERX_VERSION). In Terminal: takwerx update"
-  log "update available: $latest"
+  [ "$fresh" = 1 ] && log "update available: $latest"
+  case "$mode" in
+    notify) [ "$fresh" = 1 ] && notify "takwerx $latest is available (you have $TAKWERX_VERSION). In Terminal: takwerx update" ;;
+    print)  printf '%s  --%s  takwerx %s is available (you have %s): takwerx update, then takwerx restart. Notes: https://github.com/%s/releases\n' "$YELLOW" "$NC" "$latest" "$TAKWERX_VERSION" "$repo" ;;
+  esac
+  return 0
 }
 
 # download URL DEST: skips when DEST already exists, shows progress on a terminal.

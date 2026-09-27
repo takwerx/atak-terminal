@@ -212,7 +212,7 @@ init_emulator() {
 cmd_up() {
   local window=1
   [ "${1:-}" = --no-window ] && window=0
-  if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then notify "Starting ATAK"; update_check; fi
+  if [ "${TAKWERX_FROM_APP:-0}" = 1 ]; then notify "Starting ATAK"; update_check notify; else update_check print; fi
   rm -f "$TAKWERX_STATE/stopping"
   android_up
   location_refresh
@@ -369,6 +369,7 @@ cmd_network() {
 
 cmd_status() {
   printf '%stakwerx %s%s\n' "$BOLD" "$TAKWERX_VERSION" "$NC"
+  update_check print
   if [ "$(runtime)" = emulator ]; then
     printf '  Runtime:  emulator on the GPU (%s), %s\n' "$(tool_version "$EMU_DIR")" "$(emu_running && printf 'running' || printf 'stopped')"
     if android_online; then
@@ -438,8 +439,11 @@ cmd_update() {
   if [ -d "$TAKWERX_APP/.git" ]; then
     git -C "$TAKWERX_APP" pull --ff-only || die "git pull failed"
   else
-    local repo=${TAKWERX_REPO:-takwerx/atak-terminal} branch=${TAKWERX_BRANCH:-main} new="$TAKWERX_APP.new"
-    curl -fsSL "https://github.com/$repo/archive/refs/heads/$branch.tar.gz" -o "$TAKWERX_CACHE/app.tar.gz" || die "Download failed"
+    local src url what new="$TAKWERX_APP.new"
+    src=$(takwerx_source) || die "Could not read the current takwerx version from GitHub"
+    read -r url what <<<"$src"
+    step "Fetching takwerx ($what)"
+    curl -fsSL "$url" -o "$TAKWERX_CACHE/app.tar.gz" || die "Download failed: $url"
     rm -rf "$new"; mkdir -p "$new"; tar -xzf "$TAKWERX_CACHE/app.tar.gz" -C "$new" --strip-components=1
     rm -rf "$TAKWERX_APP.old"; mv "$TAKWERX_APP" "$TAKWERX_APP.old"; mv "$new" "$TAKWERX_APP"; rm -rf "$TAKWERX_APP.old"
   fi
