@@ -25,8 +25,10 @@ www.google.com/generate_204 for the round trip):
   the host at the same moment. Android still reports a connected, VALIDATED Wi-Fi network
   ("AndroidWifi", 10.0.2.16), ATAK held 8 live TCP connections, adb and the GPS fix were
   unaffected. What is given up is netsim's simulation between emulators, unused here. Now the
-  default in `emu_start` and in the Windows measuring script; the Dell's number with it is
-  still to come. Of the time a request took before, about 45% was the name lookup (by IP:
+  default in `emu_start` and in the Windows measuring script. **On the Dell with it: 46 ms a
+  request and 8-13 MB/s inside Android** (from 1,070 ms and 3.0-3.4), faster per request than
+  curl.exe on the Dell's own Windows (128 ms, with Falcon inspecting it), and the NVIDIA on
+  ANGLE held 48-50 fps over zoomed-in imagery, tiles sharp in every screenshot. Of the time a request took before, about 45% was the name lookup (by IP:
   422 ms, by name: 768 ms).
 - **The Intel Arc on ANGLE: 41-44 fps** zoomed into imagery (first window 27, while tiles
   were still arriving), renderer `ANGLE (Intel, Vulkan 1.3.0 (Intel(R) Arc(TM) Pro Graphics),
