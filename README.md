@@ -23,6 +23,25 @@ If you skipped step 1, the icon asks for the APK the first time you open it.
 There is no account, no telemetry, no paid tier, and nothing is sent anywhere.
 Everything runs on your own machine.
 
+## Team preview: installing from a zip
+
+Until the repository is public, the one-line install above cannot reach it. For the
+preview, the zip you were sent has everything:
+
+1. Download ATAK-CIV from [tak.gov](https://tak.gov/products/atak-civ) and leave it
+   in Downloads.
+2. Unzip the archive; you get a `takwerx-desktop` folder. Open Terminal and run:
+
+```bash
+bash ~/Downloads/takwerx-desktop/takwerx init
+```
+
+3. When ATAK is up, drag the plugin APKs from the zip's `plugins` folder onto the
+   ATAK window, one at a time. ATAK installs each and asks to load it.
+
+Everything else is the same: the **TAKwerx ATAK Terminal** icon in Applications and
+the Dock, `takwerx` in new terminals. macOS may ask once to let Terminal use Downloads.
+
 ## What you need
 
 - A Mac with Apple Silicon or Intel, macOS 13 or newer. Windows and Linux are next.

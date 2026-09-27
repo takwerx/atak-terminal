@@ -18,6 +18,13 @@ what to do. Anything that downloads by click (an app, a dmg, a "web installer") 
 quarantined, and macOS 15 dropped right-click-open, so curl is the clean path, not
 the compromise.
 
+- **Team preview ships as a zip, the repository stays private** (operator, 2026-09-26
+  night: "ready to share to my small team to get some feedback"). The zip is the
+  repository at HEAD plus a `plugins` folder with the operator's own plugin builds; the
+  ATAK APK is never in it. Install is `bash ~/Downloads/takwerx-desktop/takwerx init`,
+  which is what the MacBook did earlier tonight, then the plugins are dragged onto the
+  window, which the emulator installs and ATAK offers to load ("dragging is so clutch").
+  The curl line in the README waits for the repository to go public.
 - **The app is "TAKwerx ATAK Terminal"** (was ATAK.app; an old bundle with our
   identifier is removed by `app_build`; `takwerx app` rebuilds the icon on demand).
 - **Its icon is ATAK's own**, taken from the APK on the user's disk at build time, the
