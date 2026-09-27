@@ -2,6 +2,44 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-27, night: the Windows engine runs on the Dell; ATAK's icon and the Market, fixed on both
+
+`install.ps1` + `takwerx.ps1` + `lib/windows/` installed and ran on the managed Dell from
+one PowerShell line (served from the Mac over the switch with `TAKWERX_SOURCE`, the same
+line GitHub will serve). The operator: "everything looks great" -- the window titled
+TAKwerx ATAK Terminal with ATAK's icon on one taskbar button, the splash, the Start Menu and
+desktop shortcuts. Measured and decided on the way:
+
+- **Google's binary is not patched on Windows.** Title, icon and taskbar identity are set on
+  the emulator's windows at run time (`SetWindowText`, `WM_SETICON`, and
+  `SHGetPropertyStoreForWindow` with System.AppUserModel.ID and the relaunch keys), by a C#
+  helper compiled through Add-Type. A managed PC may refuse an executable whose Authenticode
+  signature no longer matches; nothing here asks it to. The shortcuts carry the same
+  AppUserModelID, so the taskbar treats the windows as the app and a right-click pins it
+  (Windows gives programs no way to pin themselves). The icon handles belong to the process
+  that loads them, so a hidden watcher per emulator process applies them and lives as long
+  as the emulator; it also keeps the display on and restarts ATAK on an ANR.
+- **Windows traps met in the first run**, each fixed: a missing program is a terminating
+  error in PowerShell even with stderr redirected (adb before platform-tools existed); the
+  Dell runs in FIPS mode, where `Get-FileHash -Algorithm MD5` throws "not part of the Windows
+  Platform FIPS validated cryptographic algorithms" (SHA-1 and SHA-256 are fine); 5.1 reads a
+  script without a BOM as ANSI, so every file is ASCII; `Start-Process -ArgumentList` joins an
+  array without quoting, so every argument is quoted by hand.
+- **ATAK's icon never came from a release APK, on the Mac either.** Release APKs of ATAK
+  (5.1 to 5.8.0.5 checked) store resources under scrambled names (`res/3k.png`); a file named
+  `ic_atak_launcher.png` exists only in the SDK's development `atak.apk`. The Mac looked for the
+  file name, found nothing and used takwerx's icon (its `state/icon` held `icon.svg.png`). The
+  resource table still maps the name: `resources.arsc`, entry `ic_atak_launcher`, type
+  drawable, 320 dpi, value `res/3k.png` (5.4 on) or `res/2d.png` (5.1, 5.3), 96 px, the same
+  12,246 bytes in every release. Read by `Takwerx.Apk` (C#) on Windows and `lib/apk-icon.pl`
+  on the Mac, which give identical answers on all thirteen APKs here.
+- **The Market's re-registration fired on the EULA screen.** On the Dell the background job
+  reinstalled the Market 18 s after ATAK's first launch, while logcat still said "eula has
+  not been accepted", and ATAK never asked to load it (the operator loaded it by hand). It
+  waited only for ATAK's preferences file, which exists from the first launch. It now waits
+  for `AgreedToEULA` = true in that file (ATAK's `EulaHelper`), on both engines. Not yet
+  re-measured on a fresh install.
+
 ## 2026-09-27, evening: ATAK never received takwerx's quit. `takwerx plugin` and `down` now stop it for real
 
 Found while loading Cursorwerx 0.2 with `takwerx plugin`: it printed "Plugin switched on;

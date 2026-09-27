@@ -94,7 +94,10 @@ market_register_after_first_run() {
     for i in $(seq 1 400); do
       sleep 3
       atak_running || continue
-      adb_sh "[ -f $prefs ] && echo yes" 2>/dev/null | grep -q yes || continue
+      # Past the EULA, which ATAK records as AgreedToEULA=true. Only waiting for the prefs
+      # file reinstalled the Market on the EULA screen, and ATAK never asked (Windows,
+      # 2026-09-27).
+      adb_sh "grep -q 'name=\"AgreedToEULA\" value=\"true\"' $prefs && echo yes" 2>/dev/null | grep -q yes || continue
       windows=$(adb_sh dumpsys window windows 2>/dev/null || true)
       [[ $windows == *"ATAK Loading"* ]] && continue
       sleep 10

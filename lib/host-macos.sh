@@ -201,11 +201,16 @@ app_sign() {
 # shipped here): the largest ic_atak_launcher.png in it, 96 px in ATAK 5.8, which the
 # Dock draws at 64 to 128 px. Before ATAK is installed, or if the APK has no such file,
 # the takwerx icon (assets/icon.svg) is used.
+# ATAK's launcher art from the APK. Release APKs scramble resource file names (res/3k.png),
+# so a file called ic_atak_launcher.png exists only in the SDK's development build; the
+# resource table maps the name to the file, and lib/apk-icon.pl reads it. Until 2026-09-27
+# only the file name was looked for, and every release APK fell back to takwerx's icon.
 app_icon_source() {
   local apk entry
   apk=$(config_get ATAK_APK ""); [ -f "$apk" ] || apk=$(find_atak_apk)
   [ -f "${apk:-}" ] || return 1
-  entry=$(unzip -l "$apk" 2>/dev/null | awk '$4 ~ /ic_atak_launcher\.png$/ {print $1, $4}' | sort -rn | head -n1 | cut -d' ' -f2)
+  entry=$(unzip -p "$apk" resources.arsc 2>/dev/null | perl "$TAKWERX_APP/lib/apk-icon.pl" ic_atak_launcher 2>/dev/null || true)
+  [ -n "$entry" ] || entry=$(unzip -l "$apk" 2>/dev/null | awk '$4 ~ /ic_atak_launcher\.png$/ {print $1, $4}' | sort -rn | head -n1 | cut -d' ' -f2)
   [ -n "$entry" ] || return 1
   unzip -p "$apk" "$entry" >"$TAKWERX_STATE/icon/source.png" 2>/dev/null && [ -s "$TAKWERX_STATE/icon/source.png" ]
 }

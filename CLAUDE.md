@@ -14,6 +14,13 @@ why; do not re-derive those. Windows is next: `docs/PLAN-windows.md` is the brie
   (the emulator runtime: SDK download, AVD, the patched and bundled emulator binary,
   provisioning, plugins), `lib/vm.sh` (Lima), `lib/android.sh` (container, adb, ATAK,
   window, position).
+- Windows: `install.ps1` (the `irm | iex` bootstrap), `takwerx.ps1` (the same commands),
+  `lib/windows/` (`common`, `host`, `android`, `emulator` .ps1, and `native.cs`, C# compiled
+  by Add-Type for shortcuts, taskbar identity, window title and icon, and the APK's resource
+  table). Windows PowerShell 5.1 syntax, ASCII only. Runtime state in `%LOCALAPPDATA%\takwerx`.
+  `tools/windows-measure.ps1` is the measuring script, not the product.
+- `lib/apk-icon.pl`: reads an APK's resources.arsc for ATAK's icon (release APKs scramble file
+  names); the Mac's twin of `Takwerx.Apk` in native.cs.
 - `lima/takwerx.yaml.tmpl`: the VM. Its provisioning script installs podman, binder via
   binderfs, uhid, and three systemd services: `dev-binderfs.mount`, `takwerx-location`
   (NMEA feeder) and `takwerx-adb-relay`. Placeholders `@CPUS@` etc. make the template itself
