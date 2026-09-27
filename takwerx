@@ -410,7 +410,7 @@ cmd_update() {
   if [ -d "$TAKWERX_APP/.git" ]; then
     git -C "$TAKWERX_APP" pull --ff-only || die "git pull failed"
   else
-    local repo=${TAKWERX_REPO:-takwerx/takwerx-desktop} branch=${TAKWERX_BRANCH:-main} new="$TAKWERX_APP.new"
+    local repo=${TAKWERX_REPO:-takwerx/atak-terminal} branch=${TAKWERX_BRANCH:-main} new="$TAKWERX_APP.new"
     curl -fsSL "https://github.com/$repo/archive/refs/heads/$branch.tar.gz" -o "$TAKWERX_CACHE/app.tar.gz" || die "Download failed"
     rm -rf "$new"; mkdir -p "$new"; tar -xzf "$TAKWERX_CACHE/app.tar.gz" -C "$new" --strip-components=1
     rm -rf "$TAKWERX_APP.old"; mv "$TAKWERX_APP" "$TAKWERX_APP.old"; mv "$new" "$TAKWERX_APP"; rm -rf "$TAKWERX_APP.old"

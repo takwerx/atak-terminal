@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # One-line install:
-#   curl -fsSL https://raw.githubusercontent.com/takwerx/takwerx-desktop/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash
 # Downloads takwerx into ~/.takwerx/app and runs `takwerx init`, which does everything else.
 set -euo pipefail
-REPO=${TAKWERX_REPO:-takwerx/takwerx-desktop}
+REPO=${TAKWERX_REPO:-takwerx/atak-terminal}
 BRANCH=${TAKWERX_BRANCH:-main}
 ROOT=${TAKWERX_ROOT:-$HOME/.takwerx}
 APP="$ROOT/app"

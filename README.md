@@ -10,7 +10,7 @@ any other app.
 2. Paste this line in Terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/takwerx/takwerx-desktop/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash
 ```
 
 That line downloads the tool and Google's Android emulator, starts Android 14 on

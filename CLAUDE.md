@@ -1,4 +1,4 @@
-# takwerx-desktop
+# atak-terminal (TAKwerx ATAK Terminal)
 
 Real ATAK in a desktop window: redroid (Android in a container) inside a Lima VM on macOS,
 scrcpy as the window, a bash engine (`takwerx`) driving it all. Read `README.md` for what it
