@@ -375,11 +375,22 @@ emu_watchdog() {
 " "$(date "+%F %T")" >>"$LOGF"
         "$A" -s "$D" shell am force-stop "$PKG" >/dev/null 2>&1
         sleep 2
-        act=$("$A" -s "$D" shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$PKG" 2>/dev/null | tail -n1 | tr -d "")
+        act=$("$A" -s "$D" shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$PKG" 2>/dev/null | tail -n1 | tr -d "
+")
         [ -n "$act" ] && "$A" -s "$D" shell am start -n "$act" >/dev/null 2>&1
         sleep 25
         "$A" -s "$D" shell input keyevent KEYCODE_HOME >/dev/null 2>&1; sleep 1
         [ -n "$act" ] && "$A" -s "$D" shell am start -n "$act" >/dev/null 2>&1
+        # ATAK counts the force-stop as an unclean exit and asks whether to load plugins.
+        # Load them: the user did not choose to lose them. Up to 40 s for the box.
+        for i in 1 2 3 4 5 6 7 8; do
+          sleep 5
+          box=$("$A" -s "$D" shell "uiautomator dump /sdcard/takwerx-ui.xml >/dev/null 2>&1; cat /sdcard/takwerx-ui.xml" 2>/dev/null | tr ">" "\n" | grep -E "text=\"Load Plugins\"" | grep -oE "bounds=\"\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]\"" | grep -oE "[0-9]+" | paste -sd" " -)
+          [ -n "$box" ] || continue
+          set -- $box; "$A" -s "$D" shell input tap $(( ($1+$3)/2 )) $(( ($2+$4)/2 )) >/dev/null 2>&1
+          printf "%s watchdog: answered the load-plugins question\n" "$(date "+%F %T")" >>"$LOGF"
+          break
+        done
       done' _ "$ADB" "$ADB_ENDPOINT" "$ATAK_PACKAGE" "$LOG_FILE" "$pid"
   ) >/dev/null 2>&1 </dev/null &
   disown 2>/dev/null || true
