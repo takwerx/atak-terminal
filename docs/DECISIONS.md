@@ -41,6 +41,11 @@ desktop shortcuts. Measured and decided on the way:
   Re-measured on a fresh install: `takwerx uninstall` on the Dell, then the install line,
   ATAK 5.8 from Downloads, its EULA and first-start screens, and ATAK asked to load the
   Market by itself. The operator: "perfect end to end".
+- **`takwerx update` on Windows, against the public release.** After 0.2.0 was released,
+  on the Dell in a fresh PowerShell window: "Fetching takwerx (release 0.2.0)", the tag's
+  zip from GitHub, `init --no-up` under 0.2.0, Android and ATAK kept. The first attempt
+  ran in the window that still had `TAKWERX_SOURCE` set from the development install and
+  fetched the Mac's copy instead; that variable lives only as long as its window.
 - **ATAK updated from 5.7 to 5.8 through the Market, inside the Windows engine.** Official
   ATAK-CIV 5.7.0.3 on the Dell, the Market's two-step handoff (its own 5.8 build first, then
   ATAK through Android's installer, two prompts): ATAK came back on 5.8 with the Market

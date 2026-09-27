@@ -46,8 +46,8 @@ Status 2026-09-27, night: built and verified on the Dell end to end, from `takwe
 through the one line to ATAK, the Market's own load question, the icon, the taskbar button
 and the splash (DECISIONS 2026-09-27, all four entries). Open: a PC without Windows
 Hypervisor Platform (the installer's instructions are written, never shown to a person),
-the range-and-bearing endpoint drag under Cursorwerx, and `takwerx update` on Windows,
-which needs a release to run against.
+and the range-and-bearing endpoint drag under Cursorwerx. Released as 0.2.0 the same
+night; `takwerx update` then verified on the Dell against that release.
 `tools/windows-measure.ps1` does the measuring.
 
 Before porting anything, on the Windows machine, by hand, in this order:
