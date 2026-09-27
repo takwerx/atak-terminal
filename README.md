@@ -6,7 +6,9 @@ your Mac, on the Mac's GPU. Two steps install it. After that there is a
 any other app.
 
 1. **Download ATAK-CIV first** from [tak.gov](https://tak.gov/products/atak-civ)
-   (it needs a free login). Leave the file in Downloads.
+   (it needs a free login). Either build works, the regular one or the "small" one
+   without the phone-only extras. Leave the file in Downloads; if several versions
+   are there, the newest is used.
 2. Paste this line in Terminal:
 
 ```bash
