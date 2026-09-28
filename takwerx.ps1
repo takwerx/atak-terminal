@@ -65,7 +65,7 @@ function Invoke-Init([string[]]$a) {
         Ok 'Installed'
         # After `takwerx update`: an Android brought up by an older takwerx is restarted, so
         # everything running is the new version. A clean power-off; ATAK and its data return.
-        if ((Test-EmuRunning) -and (Get-RunningVersion) -ne $TakwerxVersion) {
+        if ((Test-EmuRunning) -and (((Get-RunningVersion) -ne $TakwerxVersion) -or -not (Test-AvdImageCurrent))) {
             Step "Restarting Android under takwerx $TakwerxVersion (about a minute; ATAK and its data come back)"
             Stop-Emu
             Invoke-Up

@@ -380,9 +380,43 @@ INI
 # physical density is three quarters of the UI density: ATAK draws its map at the smaller of
 # the two, and 150 against 200 is what redroid runs at (DECISIONS 2026-09-26). Every existing
 # hw.lcd line goes first; appended duplicates are otherwise read last-wins.
+# The pinned Android image, as the AVD names it.
+emu_sysdir() { printf 'system-images/android-%s/%s/arm64-v8a/' "$SYSIMG_API" "$SYSIMG_TAG"; }
+emu_image_current() { grep -qx "image.sysdir.1=$(emu_sysdir)" "$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" 2>/dev/null; }
+
+# An existing device moves to the pinned Android image with its data. The emulator keeps
+# the image's build number in version_num.cache and throws the data partition away when it
+# changes; Android itself upgrades the data in place, as an OS update does on a phone
+# (measured 2026-09-27: a clone of a 14 device on 15 kept ATAK, 7 plugins, its settings
+# and 4.8 GB of files). So the new build number is written first, and the device is
+# cloned beside itself (APFS, costs nothing until the upgrade writes) until Android 15 has
+# booted once; emu_upgrade_done removes the copy.
+emu_upgrade_image() {
+  local dir="$EMU_AVD_HOME/$EMU_AVD.avd" ini="$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" build old
+  emu_image_current && return 0
+  old=$(sed -n 's/^image.sysdir.1=system-images\/android-\([0-9]*\)\/.*/\1/p' "$ini")
+  build=$(sed -n 's/^ro.build.version.incremental=//p' "$EMU_SYSIMG_DIR/build.prop" 2>/dev/null | head -n1)
+  step "Moving Android $old to Android $SYSIMG_API; ATAK and its data stay (the first start takes a little longer)"
+  if [ -f "$dir/userdata-qemu.img.qcow2" ] && [ ! -d "$dir.before-android$SYSIMG_API" ]; then
+    cp -cR "$dir" "$dir.before-android$SYSIMG_API" 2>/dev/null || warn "Could not keep a copy of Android $old's data; carrying on without one"
+    rm -rf "$dir.before-android$SYSIMG_API/"*.lock 2>/dev/null || true
+  fi
+  if [ -n "$build" ]; then printf '%s' "$build" >"$dir/version_num.cache"; else warn "No build number in the Android $SYSIMG_API image; the emulator may start with empty data"; fi
+  sed -i '' -e "s#^image.sysdir.1=.*#image.sysdir.1=$(emu_sysdir)#" -e "s#^target=.*#target=android-$SYSIMG_API#" "$ini"
+  sed -i '' -e "s#^target=.*#target=android-$SYSIMG_API#" "$EMU_AVD_HOME/$EMU_AVD.ini" 2>/dev/null || true
+  log "AVD $EMU_AVD moved from android-$old to android-$SYSIMG_API (build $build)"
+}
+emu_upgrade_done() {
+  local keep="$EMU_AVD_HOME/$EMU_AVD.avd.before-android$SYSIMG_API"
+  [ -d "$keep" ] || return 0
+  android_booted || return 0
+  rm -rf "$keep" && log "Android $SYSIMG_API booted with the device's data; the copy from before is removed"
+}
+
 emu_configure_avd() {
   local ini="$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" w h dpi ram cores
   [ -f "$ini" ] || die "No AVD named $EMU_AVD (expected $ini)"
+  emu_upgrade_image
   read -r w h dpi <<<"$(emu_geometry)"
   read -r ram cores <<<"$(emu_sizing)"
   { grep -vE '^(hw\.lcd\.(width|height|density)|hw\.ramSize|hw\.cpu\.ncore)[[:space:]]*=' "$ini"
@@ -531,9 +565,10 @@ emu_up() {
   emu_start
   if ! android_online || ! android_booted; then
     step "Waiting for Android to boot"
-    emu_wait 300 || die "Android did not come up (the emulator exited or took over 5 minutes). See $EMU_LOG"
+    emu_wait 300 || die "Android did not come up (the emulator exited or took over 5 minutes). See $EMU_LOG$( [ -d "$EMU_AVD_HOME/$EMU_AVD.avd.before-android$SYSIMG_API" ] && printf '. The device from before the move to Android %s is kept at %s' "$SYSIMG_API" "$EMU_AVD_HOME/$EMU_AVD.avd.before-android$SYSIMG_API")"
   fi
   ok "Android is up"
+  emu_upgrade_done
   emu_awake
   emu_provision
   emu_location_apply

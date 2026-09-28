@@ -6,6 +6,13 @@ icon mentions a new release within a day of it, and so do `takwerx up` and
 
 ## Unreleased
 
+- **ATAK no longer freezes after 10 to 30 minutes.** Android 14's graphics in the emulator
+  leaked one file handle per frame the map draws. ATAK reaches Android's limit of 32,768
+  in about ten minutes, its network connections start failing well before that, and then
+  it stops responding. takwerx now runs Android 15, which does not leak. Your device moves
+  to Android 15 by itself at the next start after `takwerx update`, with ATAK, plugins,
+  servers, certificates and maps kept. It downloads Android 15 once (about 1.7 GB), and
+  that first start takes a little longer.
 - `takwerx update` finishes by itself: if Android is running on what the update
   replaced, it is restarted onto the new version (a clean power-off, about a minute) and
   ATAK reopens with its data. No `takwerx restart` afterwards.

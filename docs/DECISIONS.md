@@ -2,6 +2,47 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-27, late night: the "presentation stall" was a fence leak in Android 14's guest graphics. Android 15, with the data kept
+
+ATAK "isn't responding" on the Dell 16 minutes after a start (the watchdog restarted it).
+The hang trace (`/data/anr`, collected with a served `collect.ps1`): the main thread in
+Cursorwerx's `PanControl.draggableUnder` -> `MapView.deepHitTest` -> `GLMapView.visitControls`
+-> `GLMapSurface.queueEventSync`, waiting for the render thread; every GLThread idle. The
+log said why the render thread was gone: `Fence: merge: sync_merge("SurfaceView[...]", 32549,
+32766) returned an error: Too many open files (-24)` at 16:54:57, ten minutes after ATAK
+started, then EMFILE everywhere.
+
+- **The leak, measured:** ATAK's `/proc/<pid>/fd` was 95% `anon_inode:sync_file`, growing by
+  57 a second, the map's frame rate, on the Mac (MoltenVK) as on the Dell (NVIDIA). SystemUI
+  and the launcher leak too, slower because they draw less; surfaceflinger does not. Every
+  app drawing through guest ANGLE on the emulator's Vulkan leaks one fence per frame, and
+  ATAK, which redraws continuously, reaches the 32,768 limit in about ten minutes. Its
+  network layer fails much sooner: Commo's `select()` takes no descriptor above 1,024, and
+  "datagram rx hit socket limit" appears about 100 s after start, so every socket opened
+  later (a TAK server reconnect, a multicast rejoin) fails. This is what the 2026-09-26
+  entries called the presentation stall (GL thread in `dequeueBuffer` under
+  `vkAcquireNextImageKHR`): not the swapchain, the descriptors.
+- **Emulator switches do not touch it:** `GrallocSync`, `VirtioGpuNativeSync` on, 57/s each;
+  `-GLAsyncSwap` kills the emulator at boot ("Failed to unbox VkImage"). The leak is in the
+  guest side of the image, not in the emulator.
+- **Android 15 (API 35 google_apis r9, build 12960925) does not leak:** ATAK at 57 fps with
+  its sync_file count flat (61 over 30 s on a fresh device; 34 over 60 s on the Mac's
+  moved device), SystemUI flat.
+- **Moving an existing device keeps its data, once the emulator is stopped from wiping it.**
+  The emulator records the image's build number (`ro.build.version.incremental` from the
+  image's `build.prop`) in the AVD's `version_num.cache` and, when it changes, silently
+  recreates the data overlay: the first clone of the Mac's device booted on 15 with 38
+  files. Written beforehand, the emulator keeps the data and Android upgrades it in place,
+  as an OS update does: a clone of the 14 device came up on 15 with ATAK 5.8.0.3, 7 plugins,
+  EULA and callsign, 4.8 GB of files, live tracks from the TAK server. `emu_upgrade_image`
+  (Mac) and `Update-AvdImage` (Windows) do exactly that at the first start after the pin
+  moves, keep a copy of the device until Android 15 has booted once (an APFS clone on the
+  Mac; a real copy on Windows when the drive has room for it), then delete it. Done through
+  takwerx on the Mac's real device: moved, booted, provisioning all in place (dark mode,
+  trimmed apps, Chrome's flag, splash, ATAK's file access), copy removed.
+- Cursorwerx's hit test on the main thread is ATAK's own pattern (its touch controller hit
+  tests there too); it hung only because the render thread could not run. Not changed.
+
 ## 2026-09-27, night: the Windows engine runs on the Dell; ATAK's icon and the Market, fixed on both
 
 `install.ps1` + `takwerx.ps1` + `lib/windows/` installed and ran on the managed Dell from

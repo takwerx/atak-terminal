@@ -3,9 +3,10 @@
 Real ATAK in a desktop window, a bash engine (`takwerx`) driving it all. Two runtimes:
 the default on Apple Silicon is Google's Android Emulator on the Mac's GPU (`lib/emulator.sh`,
 no VM); the other is redroid (Android in a container) inside a Lima VM with scrcpy as the
-window, for LAN multicast and Intel Macs. Public beta since 2026-09-26, Mac only. Read
-`README.md` for what it does and `docs/DECISIONS.md` for every non-obvious finding and
-why; do not re-derive those. Windows is next: `docs/PLAN-windows.md` is the brief.
+window, for LAN multicast and Intel Macs. Public beta since 2026-09-26, Mac and Windows
+since 0.2.0 (the Windows engine is PowerShell, below). Android 15 (API 35) since
+2026-09-27. Read `README.md` for what it does and `docs/DECISIONS.md` for every non-obvious
+finding and why; do not re-derive those.
 
 ## Layout
 
@@ -65,5 +66,6 @@ why; do not re-derive those. Windows is next: `docs/PLAN-windows.md` is the brie
 
 ## Not done
 
-Windows (see `docs/PLAN-windows.md`) and Linux hosts. A scrcpy patch to turn trackpad
-scrolling into touch drags, for the redroid runtime.
+Linux hosts. A scrcpy patch to turn trackpad scrolling into touch drags, for the redroid
+runtime. On Windows, a PC with Windows Hypervisor Platform off has not been seen by a
+person yet (`docs/PLAN-windows.md`).

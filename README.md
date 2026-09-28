@@ -22,7 +22,7 @@ curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.
 irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex
 ```
 
-That line downloads the tool and Google's Android emulator, starts Android 14 on
+That line downloads the tool and Google's Android emulator, starts Android 15 on
 your computer's GPU, installs the ATAK APK from Downloads (or opens a file picker so you
 can point at it), adds the TAKWERX Market plugin so your plugins install and update
 from inside ATAK, creates the icon, and opens the window. First run takes a few
@@ -88,9 +88,6 @@ on Windows no installer package and nothing from the Microsoft Store.
 
 Known issues, being worked on:
 
-- Now and then, after half an hour or more, the emulator's display stalls for a few
-  seconds. If ATAK stops responding, `takwerx atak` restarts it; `takwerx restart`
-  restarts Android. Nothing is lost either way.
 - No multicast: Android sits behind the emulator's NAT, so TAK servers over TLS work
   and situational awareness on 239.2.3.1 does not.
 - Nothing is code-signed. That is why the install is a line you paste: a downloaded

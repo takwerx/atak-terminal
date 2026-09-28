@@ -166,11 +166,61 @@ function New-Avd {
     Ok ("Device {0}: {1} cores, {2} MB" -f $Avd, $s[1], $s[0])
 }
 
+# An existing device moves to the pinned Android image with its data (emu_upgrade_image on
+# the Mac): the emulator keeps the image's build number in version_num.cache and discards
+# the data partition when it changes, while Android upgrades the data in place as an OS
+# update does. So the new build number is written first. A copy of the device is kept until
+# Android has booted once, when the drive has room for it (NTFS copies for real).
+function Get-AvdSysdir { return ("system-images/android-{0}/{1}/x86_64/" -f $V.SYSIMG_API, $V.SYSIMG_TAG) }
+function Test-AvdImageCurrent {
+    $ini = Join-Path $AvdHome "$Avd.avd\config.ini"
+    if (-not (Test-Path $ini)) { return $true }
+    return [bool](Select-String -Path $ini -SimpleMatch -Pattern ("image.sysdir.1=" + (Get-AvdSysdir)) -Quiet)
+}
+function Update-AvdImage {
+    if (Test-AvdImageCurrent) { return }
+    $dir = Join-Path $AvdHome "$Avd.avd"; $ini = Join-Path $dir 'config.ini'
+    $old = ''
+    foreach ($l in Get-Content $ini) { if ($l -match '^image\.sysdir\.1=system-images/android-(\d+)/') { $old = $Matches[1] } }
+    $build = ''
+    $prop = Join-Path $SysImgDir 'build.prop'
+    if (Test-Path $prop) { foreach ($l in Get-Content $prop) { if ($l -match '^ro\.build\.version\.incremental=(.+)$') { $build = $Matches[1].Trim(); break } } }
+    Step "Moving Android $old to Android $($V.SYSIMG_API); ATAK and its data stay (the first start takes a little longer)"
+    $keep = "$dir.before-android$($V.SYSIMG_API)"
+    if ((Test-Path (Join-Path $dir 'userdata-qemu.img.qcow2')) -and -not (Test-Path $keep)) {
+        $size = (Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Sum Length).Sum
+        $free = (Get-PSDrive -Name ((Split-Path $dir -Qualifier).TrimEnd(':'))).Free
+        if ($free -gt 2 * $size) {
+            Copy-Item -Recurse $dir $keep -ErrorAction SilentlyContinue
+            Get-ChildItem $keep -Filter '*.lock' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
+        } else { Warn ("Not enough free space to keep a copy of Android {0}'s data ({1:N1} GB); carrying on without one" -f $old, ($size / 1GB)) }
+    }
+    if ($build) { [System.IO.File]::WriteAllText((Join-Path $dir 'version_num.cache'), $build) }
+    else { Warn "No build number in the Android $($V.SYSIMG_API) image; the emulator may start with empty data" }
+    $lines = Get-Content $ini | ForEach-Object {
+        if ($_ -match '^image\.sysdir\.1=') { 'image.sysdir.1=' + (Get-AvdSysdir) }
+        elseif ($_ -match '^target=') { "target=android-$($V.SYSIMG_API)" }
+        else { $_ }
+    }
+    Set-Content -Path $ini -Value $lines -Encoding ASCII
+    $top = Join-Path $AvdHome "$Avd.ini"
+    if (Test-Path $top) { Set-Content -Path $top -Encoding ASCII -Value (Get-Content $top | ForEach-Object { if ($_ -match '^target=') { "target=android-$($V.SYSIMG_API)" } else { $_ } }) }
+    Log "AVD $Avd moved from android-$old to android-$($V.SYSIMG_API) (build $build)"
+}
+function Complete-AvdUpgrade {
+    $keep = Join-Path $AvdHome "$Avd.avd.before-android$($V.SYSIMG_API)"
+    if ((Test-Path $keep) -and (Test-AndroidBooted)) {
+        Remove-Item -Recurse -Force $keep -ErrorAction SilentlyContinue
+        Log "Android $($V.SYSIMG_API) booted with the device's data; the copy from before is removed"
+    }
+}
+
 # Written before every boot: the screen, RAM and cores. The physical density is three
 # quarters of the UI density, as on the Mac (ATAK draws its map at the smaller of the two).
 function Set-AvdConfig {
     $ini = Join-Path $AvdHome "$Avd.avd\config.ini"
     if (-not (Test-Path $ini)) { Die "No Android device named $Avd (expected $ini)" }
+    Update-AvdImage
     $g = Get-EmuGeometry; $s = Get-EmuSizing
     $lines = @(Get-Content $ini | Where-Object { $_ -notmatch '^(hw\.lcd\.(width|height|density)|hw\.ramSize|hw\.cpu\.ncore)\s*=' })
     $lines += @("hw.lcd.width=$($g[0])", "hw.lcd.height=$($g[1])", ("hw.lcd.density={0}" -f [int]($g[2] * 3 / 4)), "hw.ramSize=$($s[0])", "hw.cpu.ncore=$($s[1])")
@@ -287,9 +337,14 @@ function Invoke-EmuUp {
     Start-Emu
     if (-not ((Test-AndroidOnline) -and (Test-AndroidBooted))) {
         Step 'Waiting for Android to boot'
-        if (-not (Wait-Emu 300)) { Die "Android did not come up (the emulator exited or took over 5 minutes). See $EmuLog" }
+        if (-not (Wait-Emu 300)) {
+            $keep = Join-Path $AvdHome "$Avd.avd.before-android$($V.SYSIMG_API)"
+            $extra = if (Test-Path $keep) { ". The device from before the move to Android $($V.SYSIMG_API) is kept at $keep" } else { '' }
+            Die "Android did not come up (the emulator exited or took over 5 minutes). See $EmuLog$extra"
+        }
     }
     Ok 'Android is up'
+    Complete-AvdUpgrade
     Start-Watcher
     if (-not $script:Provisioned) {
         Invoke-Provision

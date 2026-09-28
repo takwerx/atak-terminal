@@ -196,7 +196,7 @@ init_emulator() {
   # After `takwerx update`: an Android still running the previous emulator build is
   # restarted onto the new one, a clean power-off, and ATAK reopens with its data. Other
   # changes need no restart: emu_up re-applies every Android setting below.
-  if emu_running && ! emu_copy_current; then
+  if emu_running && { ! emu_copy_current || ! emu_image_current; }; then
     step "Restarting Android on the new emulator build (about a minute; ATAK and its data come back)"
     emu_stop; restarted=1
   fi

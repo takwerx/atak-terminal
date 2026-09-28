@@ -9,7 +9,8 @@ Windows work reuses every Android-side decision and ports the host side.
 The same product on Windows 10 and 11, Intel or AMD, with a GPU:
 
 - One line in PowerShell installs it: `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
-- Google's Android Emulator on the host GPU, an x86-64 Android 14 google_apis image
+- Google's Android Emulator on the host GPU, an x86-64 Android 15 google_apis image (14 until
+  2026-09-27; it leaked a fence per frame)
   (ATAK-CIV ships x86-64 native libraries; no translation).
 - A Start Menu and taskbar shortcut named **TAKwerx ATAK Terminal** with ATAK's icon,
   taken from the user's APK. The emulator window carries the same title and icon.
