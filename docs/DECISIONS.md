@@ -39,7 +39,11 @@ started, then EMFILE everywhere.
   moves, keep a copy of the device until Android 15 has booted once (an APFS clone on the
   Mac; a real copy on Windows when the drive has room for it), then delete it. Done through
   takwerx on the Mac's real device: moved, booted, provisioning all in place (dark mode,
-  trimmed apps, Chrome's flag, splash, ATAK's file access), copy removed.
+  trimmed apps, Chrome's flag, splash, ATAK's file access), copy removed. On the Dell
+  (Windows, NVIDIA): `takwerx update` downloaded the x86-64 Android 15 image, moved the
+  device and restarted; ATAK's sync_file count sampled every 10 s for two minutes, map
+  untouched: 49 in all thirteen samples, at 54 fps (a first minute right after the restart
+  read 28 to 49 while ATAK settled).
 - Cursorwerx's hit test on the main thread is ATAK's own pattern (its touch controller hit
   tests there too); it hung only because the render thread could not run. Not changed.
 
