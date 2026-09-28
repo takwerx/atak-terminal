@@ -4,7 +4,7 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
-## Unreleased
+## 0.2.1 — 2026-09-27
 
 - **ATAK no longer freezes after 10 to 30 minutes.** Android 14's graphics in the emulator
   leaked one file handle per frame the map draws. ATAK reaches Android's limit of 32,768
@@ -18,6 +18,10 @@ icon mentions a new release within a day of it, and so do `takwerx up` and
   ATAK reopens with its data. No `takwerx restart` afterwards.
 - ATAK's permissions are re-applied at every start, so ATAK does not ask for file access
   again after a restart.
+- Windows: when Windows Hypervisor Platform is off, the installer explains step by step
+  how to switch it on.
+
+On a Mac or Windows: `takwerx update`. That is all; it restarts Android by itself.
 
 ## 0.2.0 — 2026-09-27
 
