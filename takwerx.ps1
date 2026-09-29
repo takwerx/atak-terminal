@@ -57,8 +57,8 @@ function Invoke-Init([string[]]$a) {
     }
     Step "takwerx $TakwerxVersion"
     Test-HostWindows
+    Test-EmuHost
     Install-EmuSdk
-    Test-Hypervisor
     Set-TakwerxPath
     Build-App
     if (-not $open) {

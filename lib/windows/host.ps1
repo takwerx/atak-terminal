@@ -33,9 +33,14 @@ function Test-HostWindows {
     if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { Die 'Windows on ARM has no Android Emulator from Google; takwerx needs an Intel or AMD PC' }
     $build = [int]$os.BuildNumber
     if ($build -lt 19041) { Die "Windows 10 2004 or newer is needed (this PC runs build $build)" }
-    $mem = Get-HostMemMB
-    if ($mem -lt 8000) { Warn "This PC has $([int]($mem/1024)) GB of memory; 16 GB or more is recommended" }
-    Ok ("{0}, build {1}, {2} GB, {3} cores" -f $os.Caption, $build, [int]($mem / 1024), (Get-HostCpus))
+    # Android gets a third of the memory, 4 GB at least, and half the threads, 2 at least
+    # (Get-EmuSizing); below 8 GB and 4 threads nothing is left for Windows. An 8 GB PC
+    # reports a little less, what its graphics reserve.
+    $mem = Get-HostMemMB; $cpus = Get-HostCpus
+    if ($mem -lt 7000) { Die ("takwerx needs 8 GB of memory or more; this PC has {0:N1} GB" -f ($mem / 1024)) }
+    if ($cpus -lt 4) { Die "takwerx needs a processor with 4 threads or more; this PC has $cpus" }
+    Ok ("{0}, build {1}, {2} GB, {3} cores" -f $os.Caption, $build, [int]($mem / 1024), $cpus)
+    if ($mem -lt 15000) { Warn "This PC has $([int]($mem/1024)) GB of memory; 16 GB is recommended. Close other programs while ATAK runs" }
 }
 
 # ---- the takwerx command in new terminals ---------------------------------------------------

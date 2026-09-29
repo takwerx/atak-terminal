@@ -2,6 +2,49 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-29: the first Windows PC that cannot run it. Google refuses its graphics; the installer now checks first
+
+A beta tester's laptop: Windows 10 Pro 19045, 8 GB, 4 threads (a dual-core), Intel HD
+Graphics 520 on a 2018 driver. WHPX had to be switched on first (a restart), then the
+window opened blank and stayed "Android Emulator - terminal:5574", Android never finished
+booting, and a series of boxes said `libandroid-emu-agents.dll`, `liblibprotobuf.dll`,
+`libandroid-emu-metrics.dll`, `libglib2_windows_msvc-x86_64.dll` "was not found". The
+tester started it about fifteen times, several overlapping.
+
+- **The emulator refused the GPU, by chip.** Its log: `GPU mode control feature flag
+  'ForceSwiftshader' is set`, `vulkan_mode_selected:swiftshader`, then `Selecting Vulkan
+  device: SwiftShader Device`: Android drawn on the processor. The rule is Google's, in
+  the pinned build's `emulator/lib/emu-original-feature-flags.protobuf`, two lists
+  ("Use Swiftshader on old GPUs on Windows, where we don't get a good Vulkan support",
+  since 36.1, and "Just use Swiftshader on older Intel systems", since 26.1), keyed on PCI
+  vendor and device id: Intel HD 520 (1916) and 620 (5916), 5500, 4600, 4400, 4000, 3000,
+  2500, 2000, Atom, Braswell, GMA; AMD Radeon HD 5450, 6450, 7600M; NVIDIA GeForce 210,
+  NVS 5200M; the Microsoft Basic Render Driver. No driver version in the rule, so no
+  driver update lifts it. SurfaceFlinger did start on SwiftShader; the boot did not finish
+  on two threads.
+- **The DLL boxes were qemu started bare, by the taskbar.** Those DLLs live in `emulator\`
+  and `emulator\lib64\`, not beside `qemu\windows-x86_64\qemu-system-x86_64.exe` (only the
+  VC runtime is there); `emulator.exe` puts them on the path for the qemu it starts. The
+  watcher, which gives the window the app's AppUserModelID and relaunch command, started
+  only after the boot, so all that time the taskbar button was bare qemu. A pin made then
+  (the installer invites one) or the jump-list entry starts qemu with no path and no
+  arguments. The watcher now starts as soon as the qemu process exists (`Wait-Emu`).
+- **And a watcher per `takwerx up`.** Since 0.2.1 the marker is "watcher qemu version";
+  `Start-Watcher` still required exactly two fields, so every start of the icon while
+  Android ran added a watcher, each restarting ATAK on an ANR. It now takes two or more.
+- **Decided: check before downloading, and stop with the reason.** `Test-HostWindows`
+  stops below 8 GB (7,000 MB reported, what the graphics reserve aside) and 4 threads, and
+  warns below 16 GB. `Test-EmuHost` stops when every PCI display adapter is on Google's
+  list (a copy in `emulator.ps1`, to refresh when the emulator pin moves) or has no driver,
+  warns when only some are, and checks the free space for what this run downloads
+  (Windows 13 GB fresh, the Mac's `emu_disk_check` 15, both from the zips' measured sizes
+  plus 4 GB for a new device and 2 of headroom). The emulator's own log is the backstop:
+  `'ForceSwiftshader' is set` within 90 seconds of a start stops the emulator with the
+  same message, unless SwiftShader was asked for in `EMU_FEATURES` or `EMU_ARGS`. The
+  hypervisor check moved from after all downloads to right after the emulator's (it needs
+  `emulator.exe -accel-check`), so a PC that needs a restart fetches 0.44 GB, not 2.2.
+  The minimums are in the README.
+
 ## 2026-09-27, late night: the "presentation stall" was a fence leak in Android 14's guest graphics. Android 15, with the data kept
 
 ATAK "isn't responding" on the Dell 16 minutes after a start (the watchdog restarted it).

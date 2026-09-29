@@ -70,6 +70,22 @@ emu_license() {
   config_set ANDROID_SDK_LICENSE accepted
 }
 
+# Free space for what this run downloads and unpacks, checked before any of it (measured
+# here: the emulator 0.39 GB zip, 1.1 unpacked and 1.1 for the private copy; Android 15
+# 1.78 and 3.8 unpacked; both zips stay in the cache) and a new device's data, which ATAK's
+# maps grow. In tenths of a GB. Windows: Test-EmuHost.
+emu_disk_check() {
+  local need=0 free
+  [ "$(tool_version "$EMU_SDK/emulator")" = "$EMULATOR_VERSION" ] || need=$((need + 26))
+  [ "$(tool_version "$EMU_SYSIMG_DIR")" = "$SYSIMG_REV" ] || need=$((need + 56))
+  [ -f "$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" ] || need=$((need + 40))
+  [ "$need" -gt 0 ] || return 0
+  need=$((need + 20))
+  free=$(df -Pk "$TAKWERX_ROOT" | awk 'NR==2 {print int($4 * 10 / 1048576)}')
+  [ "$free" -ge "$need" ] || die "Not enough free disk space: $((free / 10)).$((free % 10)) GB free, and Android with its tools needs about $(((need + 9) / 10)) GB. Free some space, then run takwerx init again"
+  ok "Disk: $((free / 10)) GB free"
+}
+
 sha1_of() { shasum -a 1 "$1" | cut -d' ' -f1; }
 verify_sha1() {
   local file=$1 want=$2 have

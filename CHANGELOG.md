@@ -4,6 +4,26 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## Unreleased
+
+- **The installer checks the computer first.** Before downloading anything it checks the
+  free disk space and, on Windows, the memory, the processor and the graphics chip. If
+  one falls short, it says which and stops, instead of leaving you with a blank window.
+  The minimums are in the README under "What you need".
+- Windows: Google's Android Emulator refuses some older graphics chips, such as the
+  Intel HD Graphics 520 and 620 in many 2015 to 2017 laptops, and draws Android on the
+  processor instead, which is far too slow for ATAK. takwerx now says so at install,
+  and stops the emulator with the same message if it happens anyway.
+- Windows: when Windows Hypervisor Platform is off, the installer now says so after
+  0.44 GB of downloads instead of 2.2 GB.
+- Windows: pinning the window to the taskbar while Android was still starting could
+  leave a pin that shows "libandroid-emu-agents.dll was not found". The window now
+  takes TAKwerx ATAK Terminal's name within seconds of appearing. If you have such a pin,
+  unpin it and pin the window again.
+- Windows: opening the icon while ATAK was already running added one more copy of a
+  background helper each time, and each copy restarted ATAK when it stopped responding.
+  Now there is only ever one.
+
 ## 0.2.1 — 2026-09-27
 
 - **ATAK no longer freezes after 10 to 30 minutes.** Android 14's graphics in the emulator

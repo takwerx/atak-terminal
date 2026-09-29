@@ -49,21 +49,52 @@ ATAK's EULA; that click is yours to make.
 
 ## What you need
 
-- A Mac with Apple Silicon and macOS 13 or newer. 16 GB of memory is comfortable;
-  8 GB is untested. Intel Macs use a different, slower path (see Runtimes) and are
-  untested in this beta.
-- Or a Windows 10 (2004 or newer) or Windows 11 PC with an Intel or AMD processor, a
-  GPU with current drivers (NVIDIA, AMD, or Intel Arc or Iris Xe), and 16 GB of memory.
-  Windows on ARM has no Android Emulator from Google. Android needs **Windows
-  Hypervisor Platform**; it is already on where your IT department runs Windows'
-  virtualization-based security, and then nothing needs an administrator. Where it is
-  off, the installer says so and how to switch it on (an administrator, once, and a
-  restart).
-- Linux is next.
+The installer checks the minimums before it downloads anything, and stops with the
+reason if the computer falls short.
+
+**Mac**
+
+- Apple Silicon (M1 or newer) and macOS 13 or newer.
+- 16 GB of memory is comfortable; 8 GB is untested.
+- Intel Macs use a different, slower path (see Runtimes) and are untested in this beta.
+
+**Windows**
+
+| | Minimum | Recommended |
+|---|---|---|
+| System | Windows 10 (2004 or newer) or Windows 11, 64-bit | |
+| Processor | Intel or AMD, 4 threads | 8 threads or more (Android then gets 4) |
+| Memory | 8 GB (untested so far) | 16 GB |
+| Graphics | Not on Google's refused list (below) | NVIDIA or AMD with current drivers, Intel Iris Xe or Arc |
+
+- **Graphics Google's emulator refuses.** On these it draws Android on the processor
+  instead of the graphics chip, which is far too slow for ATAK, and a driver update does
+  not change that:
+  - Intel HD Graphics 520 and 620, the chips in most 6th and 7th generation Core laptops.
+  - Intel HD Graphics 5500, 4600, 4400, 4000, 3000, 2500 and 2000, and older Intel
+    Atom, Celeron and GMA graphics.
+  - AMD Radeon HD 5450, HD 6450 (R5 230) and HD 7600M/7670M.
+  - NVIDIA GeForce 210 and NVS 5200M.
+  - Any PC with no graphics driver installed ("Microsoft Basic Display Adapter").
+
+  Tested and fast: NVIDIA RTX 2000 Ada and Intel Arc. Newer Intel UHD and Iris Xe are
+  not on Google's list but are untested.
+- Windows on ARM has no Android Emulator from Google.
+- Android needs **Windows Hypervisor Platform**. It is already on where your IT
+  department runs Windows' virtualization-based security, and then nothing needs an
+  administrator. Where it is off, the installer says so and how to switch it on (an
+  administrator, once, and a restart).
+
+**Both**
+
+- About 15 GB of free disk for the first install: about 7 GB for Google's emulator and
+  Android, the rest for Android's own data. ATAK's maps need more as they grow.
+- An internet connection for the first run.
 - The ATAK-CIV APK from [tak.gov](https://tak.gov/products/atak-civ). ATAK is not
   redistributed here and cannot be fetched for you; you download it once and takwerx
   installs it.
-- About 12 GB of disk and an internet connection for the first run.
+
+Linux is next.
 
 Nothing else. No Homebrew, no Docker, no Android Studio, no developer account, and
 on Windows no installer package and nothing from the Microsoft Store.
@@ -257,6 +288,15 @@ and it is the path for Intel Macs. Both keep their own Android data.
   first is for reading the ATAK APK, the second for `takwerx location here`.
 - **Windows: "takwerx is not recognized".** Open a new PowerShell window; the install
   adds the command for windows opened after it.
+- **Windows: "This PC's graphics are on Google's list of chips too old".** Google's
+  emulator refuses that graphics chip (see What you need) and would draw Android on the
+  processor. Nothing on the PC changes that; it needs a computer with newer graphics.
+  `takwerx uninstall` removes what was installed.
+- **Windows: boxes saying "libandroid-emu-agents.dll was not found".** A taskbar pin
+  made with an older takwerx while Android was still starting launches part of the
+  emulator on its own. Right-click the
+  pinned icon, **Unpin from taskbar**, and open TAKwerx ATAK Terminal from the Start Menu
+  or desktop instead. Once it runs, pin its taskbar button again.
 - **Windows: "Windows Hypervisor Platform is off."** Android runs on a part of Windows
   that is switched off on many home PCs. It is switched on once, by an administrator,
   then Windows restarts:

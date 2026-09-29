@@ -36,6 +36,72 @@ $script:TrimApps = Get-Conf 'EMU_TRIM_APPS' ('com.google.android.gms com.google.
 
 function Test-EmuInstalled { return (Test-Path $Emulator) -and (Test-Path (Join-Path $SysImgDir 'system.img')) -and (Test-Path $Adb) }
 
+# ---- will this PC run it --------------------------------------------------------------------------
+# Graphics the emulator refuses, Google's two lists in the pinned build
+# (emulator/lib/emu-original-feature-flags.protobuf: "Use Swiftshader on old GPUs on Windows,
+# where we don't get a good Vulkan support", and "Just use Swiftshader on older Intel
+# systems"). On these it sets ForceSwiftshader and draws Android on the processor: on an
+# Intel HD 520 (2026-09-28) the window stayed blank and Android never finished booting, and
+# ATAK would be far too slow anywhere. By chip, so no driver update lifts it.
+$script:SoftwareGpus = @(
+    '8086:0046', '8086:0102', '8086:0116', '8086:0126', '8086:0152', '8086:0156', '8086:015a',
+    '8086:0162', '8086:0166', '8086:016a', '8086:0402', '8086:0412', '8086:0416', '8086:041e',
+    '8086:0a16', '8086:0a1e', '8086:0f31', '8086:1616', '8086:1916', '8086:22b1', '8086:5916',
+    '8086:a001', '8086:a002', '8086:a011', '8086:a012',
+    '1002:6779', '1002:6840', '1002:68f9', '10de:0a65', '10de:0dfc', '1414:008c')
+
+# The PC's graphics as @(name, "vendor:device"); remote and virtual displays have no PCI id.
+function Get-HostGpus {
+    $out = @()
+    foreach ($g in @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue)) {
+        $id = ''
+        if ("$($g.PNPDeviceID)" -match 'VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})') { $id = ('{0}:{1}' -f $Matches[1], $Matches[2]).ToLowerInvariant() }
+        $out += , @("$($g.Name)", $id)
+    }
+    return $out
+}
+function Stop-SoftwareGpu([string]$names) {
+    Die ("This PC's graphics ({0}) are on Google's list of chips too old for the Android Emulator. It would draw Android on the processor, far too slow for ATAK, and a driver update does not change that. takwerx needs newer graphics, such as Intel Iris Xe or Arc, or a recent NVIDIA or AMD" -f $names)
+}
+
+# Before anything is downloaded: graphics the emulator will use, and the disk space for
+# what this run fetches. Sizes from Google's zips: the emulator 0.44 GB and 1.1 unpacked,
+# Android 15 1.74 and 3.75 unpacked, both zips kept in the cache; a new device's data
+# grows with ATAK's maps (10 GB on the Mac Studio's oldest). The Mac's twin is
+# emu_disk_check.
+function Test-EmuHost {
+    $pci = @(Get-HostGpus | Where-Object { $_[1] })
+    $bad = @($pci | Where-Object { ($SoftwareGpus -contains $_[1]) -or ($_[0] -match 'Microsoft Basic') })
+    if ($pci.Count -gt 0 -and $bad.Count -eq $pci.Count) {
+        $names = ($bad | ForEach-Object { $_[0] }) -join ', '
+        if ($names -match 'Microsoft Basic') { Die "Windows has no driver for this PC's graphics ($names). Install the graphics driver from the PC's maker or Windows Update, then run the install line again" }
+        Stop-SoftwareGpu $names
+    }
+    if ($bad.Count -gt 0) { Warn ("{0} is on Google's list of graphics too old for the Android Emulator; if the emulator picks it, takwerx stops and says so" -f (($bad | ForEach-Object { $_[0] }) -join ', ')) }
+    elseif ($pci.Count -gt 0) { Ok ("Graphics: " + (($pci | ForEach-Object { $_[0] }) -join ', ')) }
+    $need = 0.0
+    if ((Get-ToolVersion $EmuDir) -ne $V.EMULATOR_VERSION) { $need += 1.6 }
+    if ((Get-ToolVersion $SysImgDir) -ne $V.SYSIMG_REV) { $need += 5.5 }
+    if (-not (Test-Path (Join-Path $AvdHome "$Avd.avd\config.ini"))) { $need += 4 }
+    if ($need -eq 0) { return }
+    $need += 2
+    $drive = Get-PSDrive -Name ((Split-Path $Root -Qualifier).TrimEnd(':'))
+    $free = $drive.Free / 1GB
+    if ($free -lt $need) { Die ("Not enough free disk space on {0}: {1:N1} GB free, and Android with its tools needs about {2:N0} GB. Free some space, then run the install line again" -f $drive.Root, $free, $need) }
+    Ok ("Disk: {0:N0} GB free on {1}" -f $free, $drive.Root)
+}
+
+# The emulator's own word, from its log: it chose software drawing anyway (a chip Google
+# added after this list, or one of two graphics it picked). Not when asked for on purpose.
+function Test-EmuSoftwareGpu {
+    if ("$EmuFeatures $EmuArgs" -match '(?i)swiftshader') { return $false }
+    try {
+        $fs = [System.IO.File]::Open($EmuLog, 'Open', 'Read', 'ReadWrite')
+        try { $text = (New-Object System.IO.StreamReader $fs).ReadToEnd() } finally { $fs.Dispose() }
+    } catch { return $false }
+    return ($text -match "'ForceSwiftshader' is set")
+}
+
 # ---- Google's packages -------------------------------------------------------------------------
 function Confirm-SdkLicense {
     if ((Get-Conf 'ANDROID_SDK_LICENSE') -eq 'accepted') { return }
@@ -72,6 +138,9 @@ function Install-EmuSdk {
         Set-ToolVersion $EmuDir $V.EMULATOR_VERSION
     }
     Ok "Android Emulator $($V.EMULATOR_VERSION)"
+    # The hypervisor is asked through the emulator, so right after it and before the 1.7 GB
+    # image: a PC that needs a restart first has fetched 0.44 GB, not 2.2.
+    Test-Hypervisor
     if ((Get-ToolVersion $SysImgDir) -ne $V.SYSIMG_REV) {
         Confirm-SdkLicense
         $zip = Get-Pinned "https://dl.google.com/android/repository/sys-img/$($V.SYSIMG_TAG)/x86_64-$($V.SYSIMG_API)_r$($V.SYSIMG_REV).zip" `
@@ -264,10 +333,22 @@ function Start-Emu {
         -WindowStyle Hidden -RedirectStandardOutput $EmuLog -RedirectStandardError "$EmuLog.err" | Out-Null
 }
 
+# The watcher starts as soon as the emulator's process does, not after the boot: until it
+# gives the window the app's identity, the taskbar button is bare qemu-system-x86_64.exe,
+# and a pin made then (as takwerx invites) or its jump-list entry starts qemu without the
+# emulator's lib64, one "libandroid-emu-agents.dll was not found" box per DLL (a 4-core,
+# 8 GB PC, 2026-09-28, where the boot outlasted the user's patience).
 function Wait-Emu([int]$seconds = 300) {
     $start = Get-Date
     Start-AdbServer
+    $watched = $false
     while (((Get-Date) - $start).TotalSeconds -lt $seconds) {
+        if (-not $watched) { $watched = Start-Watcher }
+        if (((Get-Date) - $start).TotalSeconds -lt 90 -and (Test-EmuSoftwareGpu)) {
+            $p = Get-EmuProcess
+            if ($p) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+            Stop-SoftwareGpu ((Get-HostGpus | ForEach-Object { $_[0] }) -join ', ')
+        }
         if ((Test-AndroidOnline) -and (Test-AndroidBooted)) { return $true }
         if (-not (Test-EmuRunning) -and ((Get-Date) - $start).TotalSeconds -gt 30) { return $false }
         Start-Sleep -Seconds 2
@@ -321,15 +402,18 @@ function Get-RunningVersion {
     return ''
 }
 
+# True once a watcher is on the running emulator. The marker is "watcher qemu version"
+# since 0.2.1, and before that "watcher qemu".
 function Start-Watcher {
     $p = Get-EmuProcess
-    if (-not $p) { return }
+    if (-not $p) { return $false }
     $marker = Join-Path $State 'watcher.pid'
     if (Test-Path $marker) {
         $old = (Get-Content $marker -Raw).Trim() -split ' '
-        if ($old.Count -eq 2 -and $old[1] -eq "$($p.ProcessId)" -and (Get-Process -Id ([int]$old[0]) -ErrorAction SilentlyContinue)) { return }
+        if ($old.Count -ge 2 -and $old[1] -eq "$($p.ProcessId)" -and (Get-Process -Id ([int]$old[0]) -ErrorAction SilentlyContinue)) { return $true }
     }
     Start-Background '_watch' "$($p.ProcessId)"
+    return $true
 }
 
 $script:Provisioned = $false
@@ -345,7 +429,7 @@ function Invoke-EmuUp {
     }
     Ok 'Android is up'
     Complete-AvdUpgrade
-    Start-Watcher
+    [void](Start-Watcher)
     if (-not $script:Provisioned) {
         Invoke-Provision
         # ATAK's permissions, again at every start: Android keeps them across a restart, and

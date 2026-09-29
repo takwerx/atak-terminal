@@ -191,6 +191,7 @@ cmd_init() {
 # the device, first boot, then ATAK.
 init_emulator() {
   local apk=$1 open=$2 a restarted=0
+  emu_disk_check
   emu_sdk_install
   app_build
   # After `takwerx update`: an Android still running the previous emulator build is
