@@ -4,13 +4,24 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
-## Unreleased
+## 0.2.5 — 2026-09-30
 
 - **Chrome no longer gets stuck on its welcome screen.** Opened for the first time,
   Chrome showed "Welcome to Chrome" and never let you continue, because that screen
   waits for Google Play services, which takwerx switches off. Chrome now skips it and
   opens straight to a tab, so TAK Portal links and anything else you open in Chrome work
-  from the first time.
+  from the first time. If Chrome is stuck on that screen for you now, the update fixes
+  it: after the restart, open Chrome again.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
 
 ## 0.2.4 — 2026-09-29
 
