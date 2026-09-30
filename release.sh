@@ -30,8 +30,11 @@ if [ "$(tr -d '[:space:]' <VERSION)" != "$v" ] || ! git diff --quiet HEAD -- VER
 fi
 git tag -a "v$v" -m "takwerx $v" -m "$notes"
 git push --atomic origin main "v$v"
-gh release create "v$v" --title "takwerx $v" --notes "$notes
+# The generic footer only where the section does not say how to get it itself.
+footer="
 
 ---
 Installed, on a Mac or Windows: \`takwerx update\`; it restarts Android by itself when it needs to. New install: the install line in the README."
+case "$notes" in *"How to get it"*) footer='' ;; esac
+gh release create "v$v" --title "takwerx $v" --notes "$notes$footer"
 printf '\nReleased takwerx %s. Installed Macs and PCs hear of it within a day; takwerx update fetches it.\n' "$v"
