@@ -4,7 +4,7 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
-## Unreleased
+## 0.2.2 — 2026-09-29
 
 - **The installer checks the computer first.** Before downloading anything it checks the
   free disk space and, on Windows, the memory, the processor and the graphics chip. If
@@ -23,6 +23,9 @@ icon mentions a new release within a day of it, and so do `takwerx up` and
 - Windows: opening the icon while ATAK was already running added one more copy of a
   background helper each time, and each copy restarted ATAK when it stopped responding.
   Now there is only ever one.
+
+On a Mac or Windows: `takwerx update`. On Windows it restarts Android by itself (about a
+minute); ATAK and its data come back.
 
 ## 0.2.1 — 2026-09-27
 
