@@ -13,7 +13,8 @@ Cursorwerx as wheel, which it zooms on.
 
 The plan, when it is taken up: (1) the Mac window helper (`helpers/emuwindow`) catches
 `NSEventTypeMagnify` and passes it on as wheel clicks of a mouse notch's size at the
-pointer, so today's Cursorwerx zooms on a pinch with no plugin release; (2) a Cursorwerx
+pointer, so today's Cursorwerx zooms on a pinch with no plugin release; in a window and
+in full screen alike (the operator's requirement; the helper loads on every start); (2) a Cursorwerx
 "Trackpad" setting in which small wheel steps (trackpad scroll) pan the map and notches
 (mouse wheel, forwarded pinch) zoom. Windows not measured yet: precision touchpads
 usually send a pinch as Ctrl+wheel; a capture on the Dell first.
