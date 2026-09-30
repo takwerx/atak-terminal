@@ -43,6 +43,7 @@ takwerx $TAKWERX_VERSION: ATAK on your desktop
   takwerx app                 rebuild the app icon in Applications (name, icon, launcher)
   takwerx datapackage FILE    import a data package zip
   takwerx display PRESET      screen (emulator: fit this Mac's screen) | ultra | tablet | desktop | phone | WIDTHxHEIGHT@DPI
+  takwerx fullscreen [on|off] emulator: Android on the whole screen, menu bar and Dock hidden; Ctrl+Cmd+F switches
   takwerx location WHERE      LAT,LON [ACCURACY_M] | here (this Mac's location) | ip (rough) | off
   takwerx keyboard MODE       auto | uhid (hardware keyboard, at the Mac) | sdk (typed text, works over remote desktop)
   takwerx network MODE        nat | bridged (bridged gives Android its own LAN address)
@@ -310,11 +311,27 @@ cmd_display() {
   [ -n "${1:-}" ] || die "Usage: takwerx display screen|ultra|tablet|desktop|phone|WxH@DPI"
   if [ "$(runtime)" = emulator ]; then
     [ "$1" = screen ] || display_geometry "$1" >/dev/null || die "Unknown preset '$1'"
-    config_set EMU_DISPLAY "$1"
+    config_set EMU_DISPLAY "$1"; config_unset EMU_FULLSCREEN
     ok "Display $1 ($(emu_geometry | awk '{print $1"x"$2" at "$3" dpi"}')); the emulator takes a new screen size at start: takwerx restart"
     return 0
   fi
   android_up; display_apply "$1"
+}
+
+# Full screen for the emulator runtime (emu_fullscreen): Android's size is fixed at start,
+# so a running Android restarts onto the new one, as on Windows.
+cmd_fullscreen() {
+  [ "$(runtime)" = emulator ] || die "Full screen is for the emulator runtime (takwerx runtime emulator)"
+  case "${1:-}" in
+    on) config_set EMU_FULLSCREEN on ;;
+    off) config_unset EMU_FULLSCREEN ;;
+    *) printf 'Full screen: %s (takwerx fullscreen on|off)\n' "$(emu_fullscreen && echo on || echo off)"; return 0 ;;
+  esac
+  ok "Full screen $1$([ "$1" = on ] && echo '. Ctrl+Cmd+F switches to a normal window and back') (Android $(emu_geometry | awk '{print $1"x"$2}'))"
+  if emu_running; then
+    step "Restarting Android at the new size (about a minute; ATAK and its data come back)"
+    emu_stop; cmd_up
+  fi
 }
 
 cmd_location() {
@@ -508,6 +525,7 @@ main() {
     up)          cmd_up "$@" ;;
     down)        cmd_down ;;
     restart)     cmd_restart "$@" ;;
+    fullscreen)  cmd_fullscreen "$@" ;;
     atak)        cmd_atak ;;
     status)      cmd_status ;;
     doctor)      cmd_doctor ;;

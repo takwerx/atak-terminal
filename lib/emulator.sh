@@ -50,6 +50,9 @@ EMU_TRIM_APPS=$(config_get EMU_TRIM_APPS "com.google.android.gms com.google.andr
   com.google.android.settings.intelligence")
 EMU_MVK_LIB="$EMU_MVK_DIR/libMoltenVK.dylib"
 EMU_KK_LIB=/opt/homebrew/opt/mesa/lib/libvulkan_kosmickrisp.dylib
+# takwerx's window helper, loaded into the emulator by its launcher script (emu_bundle):
+# full screen, which the emulator does not offer (helpers/emuwindow).
+EMU_WINDOW_LIB="$TAKWERX_APP/helpers/emuwindow/libtakwerx-window.dylib"
 ANDROID_SDK_TERMS=https://developer.android.com/studio/terms
 
 runtime() { config_get RUNTIME "$RUNTIME_DEFAULT"; }
@@ -147,7 +150,7 @@ emu_sdk_layout() {
 }
 
 # The trailing tag is emu_prepare's own revision: bump it when the copy is built differently.
-emu_copy_revision() { printf 'emulator %s, moltenvk %s, r12\n' "$EMULATOR_VERSION" "$MOLTENVK_VERSION"; }
+emu_copy_revision() { printf 'emulator %s, moltenvk %s, r13\n' "$EMULATOR_VERSION" "$MOLTENVK_VERSION"; }
 emu_copy_current()  { [ "$(tool_version "$EMU_DIR")" = "$(emu_copy_revision)" ]; }
 
 emu_prepare() {
@@ -262,6 +265,8 @@ export DYLD_LIBRARY_PATH="\$E/lib64/qt/lib:\$E/lib64/vulkan:\$E/lib64/gles_angle
 export QTWEBENGINEPROCESS_PATH="\$E/lib64/qt/libexec/QtWebEngineProcess"
 export QTWEBENGINE_RESOURCES_PATH="\$E/lib64/qt/resources"
 export QTWEBENGINE_LOCALES_PATH="\$E/lib64/qt/translations/qtwebengine_locales"
+# takwerx's window helper: full screen, which the emulator itself does not offer.
+[ -f "\$E/lib64/libtakwerx-window.dylib" ] && export DYLD_INSERT_LIBRARIES="\$E/lib64/libtakwerx-window.dylib"
 exec "$mac/qemu-system-aarch64" "\$@"
 WRAP
   chmod +x "$bin"
@@ -301,16 +306,29 @@ emu_bundle_check() {
 # resolution. At 2560x1440 in a window dragged to 1656x932, ATAK was drawn at 65% and its
 # labels and toolbar read small and soft (2026-09-26). DPI 200 per point, as the tablet
 # preset, so a dp is 1.25 points on any Mac, Retina or not.
+# Full screen (takwerx fullscreen on): Android gets the whole screen, below the notch on a
+# MacBook, which is what macOS gives a full-screen window, and the window helper takes the
+# window full screen once it is up. The size is fixed at start: a start-time choice, and
+# Ctrl+Cmd+F switches within the session, the normal window then scaled down.
+emu_fullscreen() { [ "$(config_get EMU_FULLSCREEN)" = on ]; }
+
 emu_geometry() {
   # Its own key: redroid's DISPLAY_PRESET is a fixed tablet size, the wrong default here.
   local preset; preset=$(config_get EMU_DISPLAY screen)
-  if [ "$preset" != screen ]; then display_geometry "$preset" && return 0; fi
+  if ! emu_fullscreen && [ "$preset" != screen ]; then display_geometry "$preset" && return 0; fi
   local g w h k
-  g=$(osascript -l JavaScript -e 'ObjC.import("AppKit"); var s=$.NSScreen.mainScreen, f=s.visibleFrame;
-      [Math.round(f.size.width), Math.round(f.size.height), s.backingScaleFactor].join(" ")' 2>/dev/null) || g=''
+  if emu_fullscreen; then
+    g=$(osascript -l JavaScript -e 'ObjC.import("AppKit"); var s=$.NSScreen.mainScreen, f=s.frame, t=0;
+        try { t = s.safeAreaInsets.top || 0 } catch (e) {}
+        [Math.round(f.size.width), Math.round(f.size.height - t), s.backingScaleFactor].join(" ")' 2>/dev/null) || g=''
+  else
+    g=$(osascript -l JavaScript -e 'ObjC.import("AppKit"); var s=$.NSScreen.mainScreen, f=s.visibleFrame;
+        [Math.round(f.size.width), Math.round(f.size.height), s.backingScaleFactor].join(" ")' 2>/dev/null) || g=''
+  fi
   read -r w h k <<<"$g"
   [[ ${w:-} =~ ^[0-9]+$ && ${h:-} =~ ^[0-9]+$ && ${k:-} =~ ^[0-9]+$ ]] || { display_geometry tablet; return 0; }
-  w=$(( (w - 80) * k / 2 * 2 )); h=$(( (h - 30) * k / 2 * 2 ))
+  if emu_fullscreen; then w=$(( w * k / 2 * 2 )); h=$(( h * k / 2 * 2 ))
+  else w=$(( (w - 80) * k / 2 * 2 )); h=$(( (h - 30) * k / 2 * 2 )); fi
   printf '%s %s %s' "$w" "$h" $(( 200 * k ))
 }
 
@@ -458,6 +476,8 @@ emu_start() {
   emu_running && return 0
   emu_prepare
   emu_bundle_check
+  cmp -s "$EMU_WINDOW_LIB" "$EMU_DIR/lib64/libtakwerx-window.dylib" \
+    || cp -f "$EMU_WINDOW_LIB" "$EMU_DIR/lib64/libtakwerx-window.dylib" 2>/dev/null || true
   mkdir -p "$EMU_AVD_HOME"
   emu_avd_create
   rm -f "$EMU_AVD_HOME/$EMU_AVD.avd/"*.lock
@@ -466,6 +486,7 @@ emu_start() {
   log "emulator start: $(tool_version "$EMU_DIR")${EMU_FEATURES:+, features $EMU_FEATURES}${EMU_ARGS:+, args $EMU_ARGS}"
   # shellcheck disable=SC2086  # EMU_ARGS is a list of arguments
   ANDROID_SDK_ROOT="$EMU_SDK" ANDROID_HOME="$EMU_SDK" ANDROID_AVD_HOME="$EMU_AVD_HOME" ANDROID_EMU_VK_SELECT_ICD="$EMU_VK" \
+    TAKWERX_FULLSCREEN="$(emu_fullscreen && echo 1 || echo 0)" TAKWERX_WINDOW_LOG="$TAKWERX_LOGS/emulator-window.log" \
     nohup "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu host \
       -feature "Vulkan,GuestAngle,VirtioTablet,-WiFiPacketStream${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim $EMU_ARGS \
       >>"$EMU_LOG" 2>&1 </dev/null &

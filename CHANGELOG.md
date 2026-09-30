@@ -6,9 +6,11 @@ icon mentions a new release within a day of it, and so do `takwerx up` and
 
 ## Unreleased
 
-- **Full screen on Windows.** `takwerx fullscreen on` gives ATAK the whole screen, with no
-  title bar or taskbar. F11 (or Ctrl+Alt+F) switches between full screen and a normal window;
-  `takwerx fullscreen off` turns it off. The Mac follows.
+- **Full screen.** `takwerx fullscreen on` gives ATAK the whole screen. On Windows there is
+  no title bar or taskbar, and F11 (or Ctrl+Alt+F) switches between full screen and a
+  normal window. On a Mac it goes full screen when you click into the window, with the
+  menu bar and Dock hidden; Ctrl+Cmd+F or the green button switches.
+  `takwerx fullscreen off` turns it off.
 - **ATAK is no longer restarted over and over when a plugin makes it pause at start.**
   When Android reported ATAK not responding, takwerx restarted it right away. A plugin
   that holds ATAK up for a few seconds while it loads then did the same after every
