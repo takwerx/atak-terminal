@@ -30,6 +30,21 @@ Ctrl+Alt+F switches back and forth within the session.
   Windows) now wait up to 30 s for Android's dialog ("Application Not Responding:
   com.atakmap.app.civ" in `dumpsys window windows`), which Android takes down once the app
   answers input again; a recovered ATAK is left running and logged as such.
+- **The Mac: a window helper inside takwerx's emulator copy.** The main window comes up
+  with `NSWindowCollectionBehaviorFullScreenAuxiliary` (no green button), style 0xf; the
+  side toolbar is a child window of it (and on the Studio a second, 700x84, too). Nothing
+  outside the process may change that, so `helpers/emuwindow` (a dylib, built here and
+  committed like maclocation) is loaded by the launcher script through
+  `DYLD_INSERT_LIBRARIES`, which the copy's entitlements (`allow-dyld-environment-variables`,
+  `disable-library-validation`) permit. It marks the window FullScreenPrimary, enables the
+  green button, takes Ctrl+Cmd+F (F11 is macOS's Show Desktop), detaches and hides the child
+  windows while full screen, and logs to `emulator-window.log`. On the Studio, driven from a
+  terminal, macOS posted willEnterFullScreen and never finished: the app was not active,
+  and its own `activateIgnoringOtherApps` was refused; so the first full screen waits for
+  the app to be in front. On the MacBook (14", 1512x982 points, a 32-point notch) the app
+  was active at launch and went full screen 4 s after its window appeared; Ctrl+Cmd+F and
+  the green button both ways, repeatedly. Android is sized to the screen below the notch
+  (3024x1900); macOS gave the window 1510x949 points, so the picture is drawn at 99.9%.
 
 ## 2026-09-29: the first Windows PC that cannot run it. Google refuses its graphics; the installer now checks first
 

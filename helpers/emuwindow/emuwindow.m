@@ -18,6 +18,7 @@ static BOOL wantFull;
 static BOOL armed;         // full screen at start wanted and not yet asked for
 static BOOL rearmOnActive; // asked, macOS did not, try again when next in front
 static BOOL everFull;
+static NSUInteger transitions; // full-screen entries and exits so far
 static BOOL toldWaiting;
 static NSTimeInterval seenAt;
 static NSMutableArray *hiddenTools;
@@ -42,13 +43,14 @@ static void note(NSString *format, ...) {
     [h closeFile];
 }
 
-// The emulator's main window is its largest visible one; the side toolbar and Extended
-// Controls are smaller.
+// The emulator's main window is its largest visible titled one; the side toolbar and
+// Extended Controls are smaller, and the untitled screen-sized window macOS puts up during
+// the full-screen animation is not the emulator's (the MacBook, 2026-09-29).
 static NSWindow *mainWindow(void) {
     NSWindow *best = nil;
     CGFloat bestArea = 0;
     for (NSWindow *w in NSApp.windows) {
-        if (!w.visible) continue;
+        if (!w.visible || !(w.styleMask & NSWindowStyleMaskTitled)) continue;
         CGFloat a = w.frame.size.width * w.frame.size.height;
         if (a > bestArea) { bestArea = a; best = w; }
     }
@@ -101,8 +103,10 @@ static void toggle(NSString *why) {
     }
     [w toggleFullScreen:nil];
     if (entering) {
+        NSUInteger before = transitions;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            if (isFull(w)) return;
+            // In and out again already: the user's choice, not a failure.
+            if (isFull(w) || transitions != before) return;
             note(@"not full screen 5 s later (window %@, app %@)", NSStringFromRect(w.frame), NSApp.active ? @"active" : @"inactive");
             showTools();
             if (wantFull && !everFull) rearmOnActive = YES;
@@ -151,6 +155,7 @@ static void start(void) {
     }];
     [nc addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:nil usingBlock:^(NSNotification *n) {
         everFull = YES;
+        transitions++;
         note(@"full screen: window %@", NSStringFromRect(((NSWindow *)n.object).frame));
         hideTools(n.object);
     }];
@@ -162,6 +167,7 @@ static void start(void) {
         if (rearmOnActive) { rearmOnActive = NO; armed = YES; }
     }];
     [nc addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:nil usingBlock:^(NSNotification *n) {
+        transitions++;
         note(@"full screen off: window %@", NSStringFromRect(((NSWindow *)n.object).frame));
         showTools();
     }];
