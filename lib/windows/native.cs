@@ -344,6 +344,21 @@ namespace Takwerx
         static int fsStyle;
         static WindowPlacement fsPlacement;
         static readonly List<IntPtr> fsHidden = new List<IntPtr>();
+        // Re-applications left for this entry into full screen. The first try (2026-09-29, the
+        // Dell) re-applied every 3 seconds without limit, and ATAK stopped responding twice:
+        // each resize rebuilds the emulator's swapchain, which has stalled ATAK's GL thread
+        // before (DECISIONS 2026-09-26). So a few tries, each logged, then leave it be.
+        static int fsTries;
+        static readonly List<string> notes = new List<string>();
+
+        static string Show(Rect r) { return string.Format("{0},{1} {2}x{3}", r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top); }
+        static void Note(string s) { lock (notes) { notes.Add(s); } }
+
+        /// <summary>What the full-screen code did since the last call, for the watcher's log.</summary>
+        public static string[] TakeNotes()
+        {
+            lock (notes) { string[] a = notes.ToArray(); notes.Clear(); return a; }
+        }
 
         /// <summary>The primary screen's full size in real pixels, and the system DPI:
         /// "width height dpi".</summary>
@@ -370,7 +385,7 @@ namespace Takwerx
         }
 
         /// <summary>Puts the emulator's main window in the state Fullscreen asks for. Called
-        /// every few seconds by the watcher, so it also undoes the emulator restoring its frame.</summary>
+        /// every few seconds by the watcher; re-applies only a few times per entry.</summary>
         public static void ApplyScreenMode(int pid)
         {
             lock (Gate)
@@ -389,15 +404,21 @@ namespace Takwerx
                         WindowPlacement wp = new WindowPlacement();
                         wp.Length = Marshal.SizeOf(typeof(WindowPlacement));
                         if (!GetWindowPlacement(main, ref wp)) return;
-                        fsWindow = main; fsStyle = style; fsPlacement = wp;
+                        fsWindow = main; fsStyle = style; fsPlacement = wp; fsTries = 5;
                     }
                     Rect r;
                     GetWindowRect(main, out r);
                     Rect m = mi.Monitor;
-                    if ((style & WS_OVERLAPPEDWINDOW) != 0 || r.Left != m.Left || r.Top != m.Top || r.Right != m.Right || r.Bottom != m.Bottom)
+                    if (fsTries > 0 && ((style & WS_OVERLAPPEDWINDOW) != 0 || r.Left != m.Left || r.Top != m.Top || r.Right != m.Right || r.Bottom != m.Bottom))
                     {
+                        fsTries--;
                         SetWindowLong(main, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
                         SetWindowPos(main, IntPtr.Zero, m.Left, m.Top, m.Right - m.Left, m.Bottom - m.Top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+                        Rect after;
+                        GetWindowRect(main, out after);
+                        Note(string.Format("full screen: window {0} style 0x{1:x8} -> {2} on monitor {3}; {4} tries left{5}",
+                            Show(r), style, Show(after), Show(m), fsTries,
+                            fsTries == 0 ? ", then the window is left as the emulator has it" : ""));
                     }
                     foreach (IntPtr h in WindowsOf(pid))
                     {
@@ -419,12 +440,18 @@ namespace Takwerx
                     SetWindowPos(w, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
                     foreach (IntPtr h in fsHidden) ShowWindow(h, 4 /* SW_SHOWNOACTIVATE */);
                     fsHidden.Clear();
+                    Rect back;
+                    GetWindowRect(w, out back);
+                    Note("full screen off: window back at " + Show(back));
                 }
             }
         }
 
-        /// <summary>F11 while one of the emulator's windows is in front flips full screen. The
-        /// key still reaches Android, which does nothing with it.</summary>
+        static bool KeyDown(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+
+        /// <summary>F11, or Ctrl+Alt+F for keyboards whose F-keys are media keys, while one of
+        /// the emulator's windows is in front, flips full screen. The keys still reach Android,
+        /// which does nothing with them.</summary>
         public static void WatchKeys(int pid)
         {
             System.Threading.Thread t = new System.Threading.Thread(delegate ()
@@ -433,7 +460,9 @@ namespace Takwerx
                 while (true)
                 {
                     System.Threading.Thread.Sleep(40);
-                    bool now = (GetAsyncKeyState(0x7A /* VK_F11 */) & 0x8000) != 0;
+                    bool f11 = KeyDown(0x7A /* VK_F11 */);
+                    bool combo = KeyDown(0x11 /* VK_CONTROL */) && KeyDown(0x12 /* VK_MENU */) && KeyDown(0x46 /* F */);
+                    bool now = f11 || combo;
                     if (now && !down)
                     {
                         uint owner;
@@ -441,7 +470,8 @@ namespace Takwerx
                         if (owner == (uint)pid)
                         {
                             Fullscreen = !Fullscreen;
-                            try { ApplyScreenMode(pid); } catch (Exception) { }
+                            Note(string.Format("{0}: full screen {1}", f11 ? "F11" : "Ctrl+Alt+F", Fullscreen ? "on" : "off"));
+                            try { ApplyScreenMode(pid); } catch (Exception e) { Note("full screen: " + e.Message); }
                         }
                     }
                     down = now;

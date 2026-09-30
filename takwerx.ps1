@@ -31,7 +31,7 @@ takwerx $TakwerxVersion`: ATAK on your PC
   takwerx app                 rebuild the Start Menu and desktop shortcuts and the icon
   takwerx datapackage FILE    import a data package zip
   takwerx display PRESET      screen (fit this PC's screen) | tablet | desktop | phone | ultra | WIDTHxHEIGHT@DPI
-  takwerx fullscreen [on|off] Android on the whole screen, no title bar or taskbar; F11 switches
+  takwerx fullscreen [on|off] Android on the whole screen, no title bar or taskbar; F11 or Ctrl+Alt+F switches
   takwerx gpu [NAME]          which GPU renders: a name such as Intel or NVIDIA, or auto
   takwerx location WHERE      LAT,LON [ACCURACY_M] | here (this PC's location) | ip (rough) | off
 

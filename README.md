@@ -234,9 +234,9 @@ denser screen means more toolbar slots.
 
 **Full screen, on Windows:** `takwerx fullscreen on` gives Android the whole screen, with
 no title bar, side toolbar or taskbar (Android restarts once to take the new size). **F11**
-switches between full screen and a normal window while ATAK is in front, and
-`takwerx fullscreen off` goes back to a window for good. Google's emulator has no
-full-screen mode of its own, on either platform; the Mac is next.
+switches between full screen and a normal window while ATAK is in front (**Ctrl+Alt+F**
+where F11 is a media key), and `takwerx fullscreen off` goes back to a window for good.
+Google's emulator has no full-screen mode of its own, on either platform; the Mac is next.
 
 ATAK and Chrome sit in Android's dock at the bottom, with the app drawer. Everything
 else Google ships in the image is switched off at install (Gmail, YouTube, Maps, Play

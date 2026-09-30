@@ -480,11 +480,17 @@ function Invoke-Watch([int]$qemuPid) {
     # Full screen as Android was sized at this start; a later `takwerx fullscreen` restarts.
     $full = (Test-EmuFullscreen) -and (Import-Native)
     if (Import-Native) { [Takwerx.Native]::StayAwake() }
-    if ($full) { [Takwerx.Native]::Fullscreen = $true; [Takwerx.Native]::WatchKeys($qemuPid) }
+    if ($full) {
+        Log 'watcher: full screen for this start (F11 or Ctrl+Alt+F switches)'
+        [Takwerx.Native]::Fullscreen = $true; [Takwerx.Native]::WatchKeys($qemuPid)
+    }
     $last = ''; $tick = 0
     while (Get-Process -Id $qemuPid -ErrorAction SilentlyContinue) {
         try { [void](Set-WindowIdentity $qemuPid) } catch { Log "watcher: window identity: $($_.Exception.Message)" }
-        if ($full) { try { [Takwerx.Native]::ApplyScreenMode($qemuPid) } catch { Log "watcher: full screen: $($_.Exception.Message)" } }
+        if ($full) {
+            try { [Takwerx.Native]::ApplyScreenMode($qemuPid) } catch { Log "watcher: full screen: $($_.Exception.Message)" }
+            foreach ($n in [Takwerx.Native]::TakeNotes()) { Log "watcher: $n" }
+        }
         Start-Sleep -Seconds 3
         $tick += 3
         if ($tick % 12 -ne 0) { continue }

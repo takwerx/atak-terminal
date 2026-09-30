@@ -7,7 +7,7 @@ icon mentions a new release within a day of it, and so do `takwerx up` and
 ## Unreleased
 
 - **Full screen on Windows.** `takwerx fullscreen on` gives ATAK the whole screen, with no
-  title bar or taskbar. F11 switches between full screen and a normal window;
+  title bar or taskbar. F11 (or Ctrl+Alt+F) switches between full screen and a normal window;
   `takwerx fullscreen off` turns it off. The Mac follows.
 
 ## 0.2.2 — 2026-09-29
