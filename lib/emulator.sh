@@ -592,8 +592,12 @@ emu_up() {
 }
 
 # Until the presentation stall has a cause (DECISIONS 2026-09-26): when Android reports
-# ATAK not responding, ATAK is restarted, which is what a person would do next. Polls the
-# events log every 10 s; one restart per event; ends with the emulator.
+# ATAK not responding and ATAK stays that way, ATAK is restarted, which is what a person
+# would do next. Polls the events log every 10 s; one restart per event; ends with the
+# emulator. A freeze that ends by itself is left alone: Android takes its dialog down once
+# ATAK answers input again. Restarting on the report alone made a loop of the Atmosphere
+# plugin's 20 s freeze at start, the restart freezing again, every 103 s (Windows,
+# 2026-09-29). Up to 30 s for the dialog to go.
 emu_watchdog() {
   local pid; pid=$(emu_pid); [ -n "$pid" ] || return 0
   pgrep -f "takwerx-watchdog $pid" >/dev/null 2>&1 && return 0
@@ -605,6 +609,15 @@ emu_watchdog() {
         ev=$("$A" -s "$D" shell "logcat -b events -d -t 200" 2>/dev/null | grep -E "am_anr.*$PKG" | tail -n1)
         [ -n "$ev" ] && [ "$ev" != "$last" ] || continue
         last=$ev
+        stuck=1
+        for i in 1 2 3 4 5 6; do
+          sleep 5
+          "$A" -s "$D" shell "dumpsys window windows" 2>/dev/null | grep -q "Application Not Responding: $PKG" || { stuck=0; break; }
+        done
+        if [ "$stuck" = 0 ] && "$A" -s "$D" shell pidof "$PKG" >/dev/null 2>&1; then
+          printf "%s watchdog: ATAK was not responding and recovered by itself\n" "$(date "+%F %T")" >>"$LOGF"
+          continue
+        fi
         printf "%s watchdog: ATAK not responding; restarting it
 " "$(date "+%F %T")" >>"$LOGF"
         "$A" -s "$D" shell am force-stop "$PKG" >/dev/null 2>&1

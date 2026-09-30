@@ -2,6 +2,35 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-29, evening: full screen on Windows, and the watchdog that made a loop of a plugin's freeze
+
+Google's emulator has no full-screen mode and does not maximize, on Windows or the Mac
+(no green button); its `-full-screen` and `ctrl-alt-f` strings are plain QEMU's display,
+which it replaces, and its `fullScreenButton` is a key on the Keyboard page that it sends
+into Android. So `takwerx fullscreen on` (Windows) sizes Android to the whole primary
+screen at start and the watcher takes the frame styles off the main window and sets it
+over its monitor (Windows then hides the taskbar), hiding the side toolbar there; F11 or
+Ctrl+Alt+F switches back and forth within the session.
+
+- **Measured on the Dell:** the emulator's window came up 1938x1222 with style 0x96c40000,
+  went to 1920x1200 borderless, was moved once more by the emulator during the boot
+  (-9,0), and then held: two resizes, both before ATAK ran. The first build re-applied
+  every 3 s without a limit; it never needed to, but it now stops after five tries.
+- **ATAK "not responding" every 103 s at 1920x1200 was not the window.** `takwerx anr`
+  (new: Android's reasons and the trace's main and GL threads): "Waited 5003ms for
+  FocusEvent(hasFocus=false)" five times; the main thread in the Atmosphere plugin,
+  `AirQualityOverlay.start` -> `AtmosphereFeatures.clear` -> `awaitStore`, a
+  `CountDownLatch.await` for a registration posted to main itself, up to 20 s; every GL
+  thread idle. Fixed in Atmosphere's source on 2026-09-28 (`ba9e83f`), not yet in the
+  Dell's signed build. A focus change during that freeze (takwerx's Home press) is the
+  report.
+- **The loop was takwerx's.** The watchdog restarted ATAK on the report alone; the restart
+  froze again in the same place, its own Home press made the next report, and the next
+  check found it: 103 s, like a clock, in a normal window too. Both watchdogs (Mac and
+  Windows) now wait up to 30 s for Android's dialog ("Application Not Responding:
+  com.atakmap.app.civ" in `dumpsys window windows`), which Android takes down once the app
+  answers input again; a recovered ATAK is left running and logged as such.
+
 ## 2026-09-29: the first Windows PC that cannot run it. Google refuses its graphics; the installer now checks first
 
 A beta tester's laptop: Windows 10 Pro 19045, 8 GB, 4 threads (a dual-core), Intel HD

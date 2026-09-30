@@ -497,6 +497,15 @@ function Invoke-Watch([int]$qemuPid) {
         $ev = (AdbSh 'logcat' '-b' 'events' '-d' '-t' '200') -split "`n" | Where-Object { $_ -match "am_anr.*$([regex]::Escape($AtakPackage))" } | Select-Object -Last 1
         if (-not $ev -or $ev -eq $last) { continue }
         $last = $ev
+        # Left alone if it recovers: Android takes its dialog down once ATAK answers input
+        # again. Restarting on the report alone made a loop of the Atmosphere plugin's 20 s
+        # freeze at start, the restart freezing again, every 103 s (2026-09-29). Up to 30 s.
+        $stuck = $true
+        for ($i = 0; $i -lt 6; $i++) {
+            Start-Sleep -Seconds 5
+            if ((AdbSh 'dumpsys' 'window' 'windows') -notmatch ('Application Not Responding: ' + [regex]::Escape($AtakPackage))) { $stuck = $false; break }
+        }
+        if (-not $stuck -and (Test-AtakRunning)) { Log 'watchdog: ATAK was not responding and recovered by itself'; continue }
         Log 'watchdog: ATAK not responding; restarting it'
         [void](AdbSh 'am' 'force-stop' $AtakPackage)
         Start-Sleep -Seconds 2
