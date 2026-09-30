@@ -306,5 +306,149 @@ namespace Takwerx
         {
             SetThreadExecutionState(0x80000000 | 0x00000002 | 0x00000001); // CONTINUOUS | DISPLAY | SYSTEM
         }
+
+        // ---- full screen --------------------------------------------------------------------
+        // The emulator has no full-screen mode, so its main window is made one from outside,
+        // the way Windows programs do it themselves: the frame styles off, the window over the
+        // whole monitor (Windows then hides the taskbar), the side toolbar hidden where it
+        // lands on that monitor. Android is sized to the monitor for this at start, so the
+        // emulator's picture fits it exactly; F11, while the window is in front, switches to
+        // the normal window and back, restoring the placement it had.
+        [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hwnd, int index);
+        [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr hwnd, int index, int value);
+        [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
+        [DllImport("user32.dll")] static extern bool GetWindowPlacement(IntPtr hwnd, ref WindowPlacement wp);
+        [DllImport("user32.dll")] static extern bool SetWindowPlacement(IntPtr hwnd, ref WindowPlacement wp);
+        [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+        [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo mi);
+        [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
+        [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct Point { public int X, Y; }
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WindowPlacement { public int Length, Flags, ShowCmd; public Point MinPosition, MaxPosition; public Rect NormalPosition; }
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MonitorInfo { public int Size; public Rect Monitor, Work; public uint Flags; }
+
+        const int GWL_STYLE = -16;
+        const int WS_OVERLAPPEDWINDOW = 0x00CF0000; // caption, system menu, sizing frame, min/max boxes
+        const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_FRAMECHANGED = 0x20, SWP_NOOWNERZORDER = 0x200;
+
+        /// <summary>Whether the emulator's window should be full screen now; F11 flips it.</summary>
+        public static volatile bool Fullscreen;
+        static readonly object Gate = new object();
+        static IntPtr fsWindow = IntPtr.Zero;
+        static int fsStyle;
+        static WindowPlacement fsPlacement;
+        static readonly List<IntPtr> fsHidden = new List<IntPtr>();
+
+        /// <summary>The primary screen's full size in real pixels, and the system DPI:
+        /// "width height dpi".</summary>
+        public static string ScreenSize()
+        {
+            SetProcessDPIAware();
+            uint dpi = 96;
+            try { dpi = GetDpiForSystem(); } catch (EntryPointNotFoundException) { }
+            return GetSystemMetrics(0 /* SM_CXSCREEN */) + " " + GetSystemMetrics(1 /* SM_CYSCREEN */) + " " + dpi;
+        }
+
+        // The main window is the process's largest; the toolbar and Extended Controls are smaller.
+        static IntPtr MainWindowOf(int pid)
+        {
+            IntPtr best = IntPtr.Zero; long bestArea = 0;
+            foreach (IntPtr h in WindowsOf(pid))
+            {
+                Rect r;
+                if (!GetWindowRect(h, out r)) continue;
+                long area = (long)(r.Right - r.Left) * (r.Bottom - r.Top);
+                if (area > bestArea) { best = h; bestArea = area; }
+            }
+            return best;
+        }
+
+        /// <summary>Puts the emulator's main window in the state Fullscreen asks for. Called
+        /// every few seconds by the watcher, so it also undoes the emulator restoring its frame.</summary>
+        public static void ApplyScreenMode(int pid)
+        {
+            lock (Gate)
+            {
+                SetProcessDPIAware();
+                IntPtr main = fsWindow != IntPtr.Zero && Fullscreen ? fsWindow : MainWindowOf(pid);
+                if (main == IntPtr.Zero) return;
+                int style = GetWindowLong(main, GWL_STYLE);
+                if (Fullscreen)
+                {
+                    MonitorInfo mi = new MonitorInfo();
+                    mi.Size = Marshal.SizeOf(typeof(MonitorInfo));
+                    if (!GetMonitorInfo(MonitorFromWindow(main, 2 /* MONITOR_DEFAULTTONEAREST */), ref mi)) return;
+                    if (fsWindow != main)
+                    {
+                        WindowPlacement wp = new WindowPlacement();
+                        wp.Length = Marshal.SizeOf(typeof(WindowPlacement));
+                        if (!GetWindowPlacement(main, ref wp)) return;
+                        fsWindow = main; fsStyle = style; fsPlacement = wp;
+                    }
+                    Rect r;
+                    GetWindowRect(main, out r);
+                    Rect m = mi.Monitor;
+                    if ((style & WS_OVERLAPPEDWINDOW) != 0 || r.Left != m.Left || r.Top != m.Top || r.Right != m.Right || r.Bottom != m.Bottom)
+                    {
+                        SetWindowLong(main, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
+                        SetWindowPos(main, IntPtr.Zero, m.Left, m.Top, m.Right - m.Left, m.Bottom - m.Top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+                    }
+                    foreach (IntPtr h in WindowsOf(pid))
+                    {
+                        if (h == main) continue;
+                        Rect t;
+                        if (!GetWindowRect(h, out t)) continue;
+                        bool narrow = (t.Right - t.Left) * 3 < (t.Bottom - t.Top);
+                        bool onScreen = t.Left < m.Right && t.Right > m.Left && t.Top < m.Bottom && t.Bottom > m.Top;
+                        if (narrow && onScreen) { ShowWindow(h, 0 /* SW_HIDE */); if (!fsHidden.Contains(h)) fsHidden.Add(h); }
+                    }
+                }
+                else if (fsWindow != IntPtr.Zero)
+                {
+                    IntPtr w = fsWindow;
+                    fsWindow = IntPtr.Zero;
+                    SetWindowLong(w, GWL_STYLE, fsStyle);
+                    WindowPlacement wp = fsPlacement;
+                    SetWindowPlacement(w, ref wp);
+                    SetWindowPos(w, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+                    foreach (IntPtr h in fsHidden) ShowWindow(h, 4 /* SW_SHOWNOACTIVATE */);
+                    fsHidden.Clear();
+                }
+            }
+        }
+
+        /// <summary>F11 while one of the emulator's windows is in front flips full screen. The
+        /// key still reaches Android, which does nothing with it.</summary>
+        public static void WatchKeys(int pid)
+        {
+            System.Threading.Thread t = new System.Threading.Thread(delegate ()
+            {
+                bool down = false;
+                while (true)
+                {
+                    System.Threading.Thread.Sleep(40);
+                    bool now = (GetAsyncKeyState(0x7A /* VK_F11 */) & 0x8000) != 0;
+                    if (now && !down)
+                    {
+                        uint owner;
+                        GetWindowThreadProcessId(GetForegroundWindow(), out owner);
+                        if (owner == (uint)pid)
+                        {
+                            Fullscreen = !Fullscreen;
+                            try { ApplyScreenMode(pid); } catch (Exception) { }
+                        }
+                    }
+                    down = now;
+                }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
     }
 }

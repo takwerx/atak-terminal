@@ -4,6 +4,12 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## Unreleased
+
+- **Full screen on Windows.** `takwerx fullscreen on` gives ATAK the whole screen, with no
+  title bar or taskbar. F11 switches between full screen and a normal window;
+  `takwerx fullscreen off` turns it off. The Mac follows.
+
 ## 0.2.2 — 2026-09-29
 
 - **The installer checks the computer first.** Before downloading anything it checks the

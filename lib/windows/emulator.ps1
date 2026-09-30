@@ -190,20 +190,32 @@ function Test-Hypervisor {
 # by default Android gets the screen's work area less the window's title bar and side
 # toolbar: a maximized window is 1:1. DPI 200 per 96 of Windows' scaling, as the Mac's 200
 # per point, so a dp is the same physical size on both.
+# Full screen (takwerx fullscreen on): Android gets the whole screen, the watcher takes the
+# window's frame off over it (Takwerx.Native.ApplyScreenMode). The size is fixed at start
+# and the emulator keeps its picture's proportions, so this is a start-time choice; F11
+# only switches between it and a normal window, scaled down, within that session.
+function Test-EmuFullscreen { return (Get-Conf 'EMU_FULLSCREEN') -eq 'on' }
+
 function Get-EmuGeometry {
+    $full = Test-EmuFullscreen
     $preset = Get-Conf 'EMU_DISPLAY' 'screen'
-    switch ($preset) {
-        'tablet'  { return @(2560, 1600, 320) }
-        'desktop' { return @(1920, 1080, 240) }
-        'phone'   { return @(1080, 2340, 440) }
-        'ultra'   { return @(3440, 1440, 280) }
+    if (-not $full) {
+        switch ($preset) {
+            'tablet'  { return @(2560, 1600, 320) }
+            'desktop' { return @(1920, 1080, 240) }
+            'phone'   { return @(1080, 2340, 440) }
+            'ultra'   { return @(3440, 1440, 280) }
+        }
+        if ($preset -match '^(\d+)x(\d+)@(\d+)$') { return @([int]$Matches[1], [int]$Matches[2], [int]$Matches[3]) }
     }
-    if ($preset -match '^(\d+)x(\d+)@(\d+)$') { return @([int]$Matches[1], [int]$Matches[2], [int]$Matches[3]) }
     $wa = $null
-    if (Import-Native) { try { $wa = ([Takwerx.Native]::WorkArea() -split ' ') } catch {} }
+    if (Import-Native) {
+        try { if ($full) { $wa = ([Takwerx.Native]::ScreenSize() -split ' ') } else { $wa = ([Takwerx.Native]::WorkArea() -split ' ') } } catch {}
+    }
     if (-not $wa) { return @(2560, 1600, 320) }
     $k = [double]$wa[2] / 96.0
-    $w = [int]$wa[0] - [int](90 * $k); $h = [int]$wa[1] - [int](50 * $k)
+    if ($full) { $w = [int]$wa[0]; $h = [int]$wa[1] }
+    else { $w = [int]$wa[0] - [int](90 * $k); $h = [int]$wa[1] - [int](50 * $k) }
     $w -= $w % 2; $h -= $h % 2
     return @($w, $h, [int][Math]::Round(200 * $k))
 }
@@ -465,10 +477,14 @@ function Stop-Emu {
 #     load-plugins question after that restart answered, since the user chose those plugins.
 function Invoke-Watch([int]$qemuPid) {
     Set-Content -Path (Join-Path $State 'watcher.pid') -Value "$PID $qemuPid $TakwerxVersion" -Encoding ASCII
+    # Full screen as Android was sized at this start; a later `takwerx fullscreen` restarts.
+    $full = (Test-EmuFullscreen) -and (Import-Native)
     if (Import-Native) { [Takwerx.Native]::StayAwake() }
+    if ($full) { [Takwerx.Native]::Fullscreen = $true; [Takwerx.Native]::WatchKeys($qemuPid) }
     $last = ''; $tick = 0
     while (Get-Process -Id $qemuPid -ErrorAction SilentlyContinue) {
         try { [void](Set-WindowIdentity $qemuPid) } catch { Log "watcher: window identity: $($_.Exception.Message)" }
+        if ($full) { try { [Takwerx.Native]::ApplyScreenMode($qemuPid) } catch { Log "watcher: full screen: $($_.Exception.Message)" } }
         Start-Sleep -Seconds 3
         $tick += 3
         if ($tick % 12 -ne 0) { continue }

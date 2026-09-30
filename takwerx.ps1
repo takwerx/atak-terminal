@@ -31,6 +31,7 @@ takwerx $TakwerxVersion`: ATAK on your PC
   takwerx app                 rebuild the Start Menu and desktop shortcuts and the icon
   takwerx datapackage FILE    import a data package zip
   takwerx display PRESET      screen (fit this PC's screen) | tablet | desktop | phone | ultra | WIDTHxHEIGHT@DPI
+  takwerx fullscreen [on|off] Android on the whole screen, no title bar or taskbar; F11 switches
   takwerx gpu [NAME]          which GPU renders: a name such as Intel or NVIDIA, or auto
   takwerx location WHERE      LAT,LON [ACCURACY_M] | here (this PC's location) | ip (rough) | off
 
@@ -124,7 +125,8 @@ function Invoke-Status {
     Write-Host ("  Runtime:  emulator {0} on the GPU ({1}), {2}" -f (Get-ToolVersion $EmuDir), $gpu, $run)
     if (Test-AndroidOnline) {
         $g = Get-EmuGeometry
-        Write-Host ("  Android:  {0}, display {1} ({2}x{3} at {4} dpi)" -f $Serial, (Get-Conf 'EMU_DISPLAY' 'screen'), $g[0], $g[1], $g[2])
+        $d = if (Test-EmuFullscreen) { 'full screen' } else { Get-Conf 'EMU_DISPLAY' 'screen' }
+        Write-Host ("  Android:  {0}, display {1} ({2}x{3} at {4} dpi)" -f $Serial, $d, $g[0], $g[1], $g[2])
         if (Test-AtakInstalled) { $r = if (Test-AtakRunning) { ', running' } else { '' }; Write-Host "  ATAK:     $(Get-AtakVersion)$r" } else { Write-Host '  ATAK:     not installed' }
     }
     if (Get-Conf 'LOCATION') { Write-Host ("  Position: {0} (about {1} m, from {2})" -f (Get-Conf 'LOCATION'), (Get-Conf 'LOCATION_ACCURACY'), (Get-Conf 'LOCATION_SOURCE')) }
@@ -207,9 +209,22 @@ function Invoke-Main([string[]]$a) {
         'display' {
             if ($rest.Count -lt 1) { Die 'Usage: takwerx display screen|tablet|desktop|phone|ultra|WxH@DPI' }
             if ($rest[0] -notmatch '^(screen|tablet|desktop|phone|ultra|\d+x\d+@\d+)$') { Die "Unknown preset '$($rest[0])'" }
-            Set-Conf 'EMU_DISPLAY' $rest[0]
+            Set-Conf 'EMU_DISPLAY' $rest[0]; Remove-Conf 'EMU_FULLSCREEN'
             $g = Get-EmuGeometry
             Ok ("Display {0} ({1}x{2} at {3} dpi); the emulator takes a new screen size at start: takwerx restart" -f $rest[0], $g[0], $g[1], $g[2])
+        }
+        'fullscreen' {
+            $want = if ($rest.Count -gt 0) { $rest[0] } else { '' }
+            if ($want -notin 'on', 'off') {
+                $cur = if (Test-EmuFullscreen) { 'on' } else { 'off' }
+                Write-Host "Full screen: $cur (takwerx fullscreen on|off)"; return
+            }
+            if ($want -eq 'on') { Set-Conf 'EMU_FULLSCREEN' 'on' } else { Remove-Conf 'EMU_FULLSCREEN' }
+            $g = Get-EmuGeometry
+            $how = if ($want -eq 'on') { 'on. F11 switches to a normal window and back' } else { 'off' }
+            Ok ("Full screen {0} (Android {1}x{2})" -f $how, $g[0], $g[1])
+            # Android's screen size is fixed at start: a running one restarts onto the new size.
+            if (Test-EmuRunning) { Step 'Restarting Android at the new size (about a minute; ATAK and its data come back)'; Stop-Emu; Invoke-Up }
         }
         'gpu'     {
             if ($rest.Count -lt 1) { $cur = if ($EmuGpu) { $EmuGpu } else { 'auto' }; Write-Host "GPU: $cur"; return }
