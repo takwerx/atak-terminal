@@ -4,13 +4,25 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
-## Unreleased
+## 0.2.4 — 2026-09-29
 
 - **ATAK opens once.** At every start, takwerx sent ATAK to Android's home screen and
   back again, so it looked as if ATAK opened, closed and opened again. That worked around
   text fields not taking typing after a start on Android 14. Android 15, which everyone
   has had since 0.2.1, does not need it, so ATAK now simply opens. If a text field ever
   ignores your typing right after a start, tell us.
+- When ATAK stops responding and takwerx restarts it, it no longer does the same
+  home-and-back either.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
 
 ## 0.2.3 — 2026-09-29
 
