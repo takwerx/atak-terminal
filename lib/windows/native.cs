@@ -318,6 +318,7 @@ namespace Takwerx
         [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr hwnd, int index, int value);
         [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
         [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
+        [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr hwnd, out Rect rect);
         [DllImport("user32.dll")] static extern bool GetWindowPlacement(IntPtr hwnd, ref WindowPlacement wp);
         [DllImport("user32.dll")] static extern bool SetWindowPlacement(IntPtr hwnd, ref WindowPlacement wp);
         [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
@@ -442,6 +443,29 @@ namespace Takwerx
                     fsHidden.Clear();
                     Rect back;
                     GetWindowRect(w, out back);
+                    // Android is the whole screen's size in this mode, so the window it
+                    // opened with is the screen plus a frame, 1938x1222 on a 1920x1200 Dell,
+                    // over the taskbar and off the edges. Scaled into the work area instead,
+                    // the picture's proportions kept, centred.
+                    MonitorInfo wmi = new MonitorInfo();
+                    wmi.Size = Marshal.SizeOf(typeof(MonitorInfo));
+                    Rect client;
+                    if (GetMonitorInfo(MonitorFromWindow(w, 2 /* MONITOR_DEFAULTTONEAREST */), ref wmi) && GetClientRect(w, out client))
+                    {
+                        Rect wa = wmi.Work;
+                        int waW = wa.Right - wa.Left, waH = wa.Bottom - wa.Top;
+                        int outW = back.Right - back.Left, outH = back.Bottom - back.Top;
+                        int cw = client.Right - client.Left, ch = client.Bottom - client.Top;
+                        int fw = outW - cw, fh = outH - ch;
+                        if ((outW > waW || outH > waH) && cw > 0 && ch > 0 && waW > fw && waH > fh)
+                        {
+                            double k = Math.Min((double)(waW - fw) / cw, (double)(waH - fh) / ch);
+                            int nw = (int)(cw * k) + fw, nh = (int)(ch * k) + fh;
+                            SetWindowPos(w, IntPtr.Zero, wa.Left + (waW - nw) / 2, wa.Top + (waH - nh) / 2, nw, nh, SWP_NOZORDER | SWP_NOOWNERZORDER);
+                            Note(string.Format("full screen off: {0} is bigger than the work area {1}; fitted", Show(back), Show(wa)));
+                            GetWindowRect(w, out back);
+                        }
+                    }
                     Note("full screen off: window back at " + Show(back));
                 }
             }
