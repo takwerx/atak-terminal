@@ -38,6 +38,7 @@ takwerx $TakwerxVersion`: ATAK on your PC
   takwerx shell               adb shell into Android
   takwerx screenshot [FILE]   save a PNG of the Android screen
   takwerx logs [--android|--emulator]   takwerx log; logcat; the emulator's own log
+  takwerx anr                 why ATAK last stopped responding (Android's reason, ATAK's threads)
   takwerx reset               wipe Android (ATAK settings, certs, maps)
   takwerx update              update takwerx and its pinned tools
   takwerx uninstall           remove everything takwerx installed
@@ -244,6 +245,7 @@ function Invoke-Main([string[]]$a) {
             elseif ($rest -contains '--emulator' -or $rest -contains '--container') { Get-Content $EmuLog -Tail 300 }
             else { Get-Content $LogFile -Tail 100 }
         }
+        'anr'     { Assert-Installed; Show-AtakAnr }
         'reset'   {
             Assert-Installed
             if (-not (Confirm-Yes 'This wipes Android: ATAK settings, server connections, certificates, maps and plugins. Continue?')) { Say 'Cancelled.'; return }

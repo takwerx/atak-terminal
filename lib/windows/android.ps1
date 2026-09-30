@@ -178,6 +178,38 @@ function Repair-AtakFocus {
     }
 }
 
+# Why ATAK last stopped responding: Android's reasons from the event log, and from the newest
+# trace in /data/anr the main and GL threads of the process it names, the file saved whole
+# to the logs folder. The hang collector of 2026-09-27 (a served collect.ps1), built in.
+function Show-AtakAnr {
+    if (-not (Test-AndroidOnline)) { Die 'Android is not running (takwerx up)' }
+    [void](Enable-AdbRoot)
+    $pat = 'am_anr.*' + [regex]::Escape($AtakPackage)
+    $events = @((AdbSh 'logcat' '-b' 'events' '-d') -split "`n" | Where-Object { $_ -match $pat } | Select-Object -Last 5)
+    if ($events.Count -eq 0) { Say "No ATAK 'not responding' in Android's event log since Android started" }
+    else { Write-Host "Android's reasons, newest last:" -ForegroundColor White; foreach ($e in $events) { Write-Host "  $($e.Trim())" } }
+    $file = @((AdbSh 'ls' '-t' '/data/anr') -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^anr_' }) | Select-Object -First 1
+    if (-not $file) { Say 'No trace file in /data/anr'; return }
+    $text = AdbSh 'cat' "/data/anr/$file"
+    $out = Join-Path $Logs "$file.txt"
+    [System.IO.File]::WriteAllText($out, $text)
+    Write-Host ''
+    Write-Host "Trace $file (saved whole to $out):" -ForegroundColor White
+    # The process that did not respond comes first in the file; its section ends where the
+    # next process begins.
+    $lines = $text -split "`n"
+    $pids = 0; $shown = 0
+    for ($i = 0; $i -lt $lines.Count -and $shown -lt 4; $i++) {
+        if ($lines[$i] -match '^----- pid ') { $pids++; if ($pids -gt 1) { break } }
+        if ($lines[$i] -match '^Cmd line:') { Write-Host "  $($lines[$i].Trim())" }
+        if ($lines[$i] -match '^"(main|GLThread[^"]*)"') {
+            Write-Host ''
+            for ($j = $i; $j -lt [Math]::Min($i + 30, $lines.Count) -and $lines[$j].Trim(); $j++) { Write-Host "  $($lines[$j].TrimEnd())" }
+            $shown++
+        }
+    }
+}
+
 # ATAK in Android's dock next to Chrome (emu_dock_atak): a row in the launcher's database.
 function Set-AtakInDock {
     if (-not (Enable-AdbRoot)) { return }
