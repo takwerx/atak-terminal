@@ -2,6 +2,20 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-29, night: ATAK's start bounce retired on Android 15
+
+The operator: "why does it start, close and then restart again every time I open". That
+was `emu_focus_fix` / `Repair-AtakFocus` (2026-09-26): once ATAK's main activity had focus,
+Home and ATAK again, because on Android 14 the hand-over from "ATAK Loading" dropped
+ATAK's focus report and no text field took typing. On Android 15 (the Studio), started
+without the bounce, WindowManager still logs "Unknown focus tokens, dropping
+reportFocusChanged", yet the input dispatcher's focused window, the IME's served view and
+ATAK's own `mHasWindowFocus` (`dumpsys activity top`) are all ATAK: the report that matters
+arrives. Same through takwerx's own start. So the bounce is off by default on both
+platforms (`EMU_FOCUS_FIX=on` brings it back), and the watchdog's restart no longer does
+its own Home-and-back, whose focus change was the event behind the 103-second
+not-responding loop above.
+
 ## 2026-09-29, evening: full screen on Windows, and the watchdog that made a loop of a plugin's freeze
 
 Google's emulator has no full-screen mode and does not maximize, on Windows or the Mac

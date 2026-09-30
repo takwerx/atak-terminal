@@ -4,6 +4,14 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## Unreleased
+
+- **ATAK opens once.** At every start, takwerx sent ATAK to Android's home screen and
+  back again, so it looked as if ATAK opened, closed and opened again. That worked around
+  text fields not taking typing after a start on Android 14. Android 15, which everyone
+  has had since 0.2.1, does not need it, so ATAK now simply opens. If a text field ever
+  ignores your typing right after a start, tell us.
+
 ## 0.2.3 — 2026-09-29
 
 - **Full screen.** `takwerx fullscreen on` gives ATAK the whole screen. Android restarts

@@ -511,7 +511,6 @@ function Invoke-Watch([int]$qemuPid) {
         Start-Sleep -Seconds 2
         Start-Atak
         Start-Sleep -Seconds 25
-        [void](AdbSh 'input' 'keyevent' 'KEYCODE_HOME'); Start-Sleep -Seconds 1; Start-Atak
         for ($i = 0; $i -lt 8; $i++) {
             Start-Sleep -Seconds 5
             $ui = AdbSh 'uiautomator dump /sdcard/takwerx-ui.xml >/dev/null 2>&1; cat /sdcard/takwerx-ui.xml'

@@ -163,6 +163,10 @@ function Wait-MarketRegistration {
 # focus report, so no text field on the main screen takes typing until ATAK is sent home and
 # back once (emu_focus_fix, DECISIONS 2026-09-26).
 function Repair-AtakFocus {
+    # Android 15 no longer needs it (emu_focus_fix on the Mac, 2026-09-29): ATAK's window has
+    # focus on a fresh start, and the bounce showed as ATAK opening, closing and opening
+    # again. EMU_FOCUS_FIX=on in the config brings it back.
+    if ((Get-Conf 'EMU_FOCUS_FIX' 'off') -ne 'on') { return }
     for ($i = 0; $i -lt 60; $i++) {
         Start-Sleep -Seconds 2
         $focus = AdbSh 'dumpsys' 'window'

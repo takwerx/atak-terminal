@@ -647,8 +647,6 @@ emu_watchdog() {
 ")
         [ -n "$act" ] && "$A" -s "$D" shell am start -n "$act" >/dev/null 2>&1
         sleep 25
-        "$A" -s "$D" shell input keyevent KEYCODE_HOME >/dev/null 2>&1; sleep 1
-        [ -n "$act" ] && "$A" -s "$D" shell am start -n "$act" >/dev/null 2>&1
         # ATAK counts the force-stop as an unclean exit and asks whether to load plugins.
         # Load them: the user did not choose to lose them. Up to 40 s for the box.
         for i in 1 2 3 4 5 6 7 8; do
@@ -721,6 +719,11 @@ emu_plugins_enable() {
 # (2026-09-26). Sending ATAK home and back once re-runs the focus hand-over. Waits for the
 # loading window to go, in the background, so `takwerx up` returns at once.
 emu_focus_fix() {
+  # Android 15 no longer needs it: on a fresh start without the bounce ATAK's window has
+  # mHasWindowFocus=true, the "Unknown focus tokens" line notwithstanding (the Studio,
+  # 2026-09-29), and the bounce showed as ATAK opening, closing and opening again.
+  # EMU_FOCUS_FIX=on brings it back for a machine where text fields stop taking typing.
+  [ "$(config_get EMU_FOCUS_FIX off)" = on ] || return 0
   (
     local i focus windows
     for i in $(seq 1 60); do
