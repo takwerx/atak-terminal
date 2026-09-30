@@ -2,6 +2,22 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-29, late: trackpad pinch on the Mac never reaches Android (measured; work deferred)
+
+`getevent -lt` in Android on the MacBook (recorded over SSH while the operator used the
+trackpad over ATAK): a click, then 6.6 s of pinching with **no event at all**, then a
+two-finger scroll as 51 `REL_WHEEL` of -1 in 0.83 s on the QEMU Virtio Tablet (a mouse
+wheel click is one of 8 there, per Cursorwerx's `notch()`). No key events, no touch
+points. So the emulator drops macOS's magnify gesture, and trackpad scroll reaches
+Cursorwerx as wheel, which it zooms on.
+
+The plan, when it is taken up: (1) the Mac window helper (`helpers/emuwindow`) catches
+`NSEventTypeMagnify` and passes it on as wheel clicks of a mouse notch's size at the
+pointer, so today's Cursorwerx zooms on a pinch with no plugin release; (2) a Cursorwerx
+"Trackpad" setting in which small wheel steps (trackpad scroll) pan the map and notches
+(mouse wheel, forwarded pinch) zoom. Windows not measured yet: precision touchpads
+usually send a pinch as Ctrl+wheel; a capture on the Dell first.
+
 ## 2026-09-29, night: ATAK's start bounce retired on Android 15
 
 The operator: "why does it start, close and then restart again every time I open". That
