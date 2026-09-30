@@ -2,10 +2,10 @@
 # Cuts a takwerx release:   ./release.sh 0.1.2
 # Before: write the "## 0.1.2 — <date>" section in CHANGELOG.md (it may be uncommitted).
 # This bumps VERSION, commits, tags v0.1.2, pushes commit and tag in one atomic push, and
-# creates the GitHub release with the CHANGELOG section as its notes. Installed Macs are
-# told within a day and fetch this tag with `takwerx update`; the install line fetches it
-# from now on. If VERSION already says 0.1.2 and is committed, only the tag and release are
-# made.
+# creates the GitHub release with the CHANGELOG section as its notes. Installed Macs and
+# PCs are told within a day and fetch this tag with `takwerx update`, which restarts
+# Android onto it by itself (0.2.1 on); the install line fetches it from now on. If
+# VERSION already says 0.1.2 and is committed, only the tag and release are made.
 set -euo pipefail
 cd "$(dirname "$0")"
 v=${1:-}
@@ -33,5 +33,5 @@ git push --atomic origin main "v$v"
 gh release create "v$v" --title "takwerx $v" --notes "$notes
 
 ---
-Installed Mac: \`takwerx update\`, then \`takwerx restart\`. New Mac: the install line in the README."
-printf '\nReleased takwerx %s. Installed Macs hear of it within a day; takwerx update fetches it.\n' "$v"
+Installed, on a Mac or Windows: \`takwerx update\`; it restarts Android by itself when it needs to. New install: the install line in the README."
+printf '\nReleased takwerx %s. Installed Macs and PCs hear of it within a day; takwerx update fetches it.\n' "$v"
