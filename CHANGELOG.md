@@ -4,6 +4,14 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## Unreleased
+
+- **Chrome no longer gets stuck on its welcome screen.** Opened for the first time,
+  Chrome showed "Welcome to Chrome" and never let you continue, because that screen
+  waits for Google Play services, which takwerx switches off. Chrome now skips it and
+  opens straight to a tab, so TAK Portal links and anything else you open in Chrome work
+  from the first time.
+
 ## 0.2.4 — 2026-09-29
 
 - **ATAK opens once.** At every start, takwerx sent ATAK to Android's home screen and

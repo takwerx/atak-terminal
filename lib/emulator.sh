@@ -536,7 +536,11 @@ emu_provision() {
   # then the GPU context is lost), exits, and restarts about every two seconds. Pages
   # showed black and the screen flashed (2026-09-26). Chrome reads this file on a
   # debuggable image, which the google_apis image is. ATAK's WebView is unaffected.
-  adb_sh "echo 'chrome --disable-features=AndroidSurfaceControl' > /data/local/tmp/chrome-command-line; chmod 644 /data/local/tmp/chrome-command-line" >/dev/null 2>&1 || true
+  # --disable-fre: Chrome's welcome screen waits on Play services, switched off here
+  # (emu_trim_apps), for its account and policy checks ("policyServiceInitialized:false",
+  # "Can't use Google Play Services"), and never lets anyone past; a tester's friend was
+  # stuck on it (2026-09-30). The flag skips the welcome screen; Chrome opens a tab.
+  adb_sh "echo 'chrome --disable-features=AndroidSurfaceControl --disable-fre' > /data/local/tmp/chrome-command-line; chmod 644 /data/local/tmp/chrome-command-line" >/dev/null 2>&1 || true
   # Before ATAK starts, and on every boot (a debug property does not persist). ANGLE builds
   # each program's pipeline at link time with float placeholders for integer attributes of
   # its own; Metal rejects that pipeline ("uint2 cannot be read using ...Float4"), the link

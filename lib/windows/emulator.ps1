@@ -378,7 +378,7 @@ DPI=$1; shift
 EN=$(pm list packages -e --user 0)
 for P in "$@"; do echo "$EN" | grep -qx "package:$P" && pm disable-user --user 0 "$P" >/dev/null 2>&1 && TRIMMED=1; done
 [ -n "$TRIMMED" ] && am force-stop com.google.android.apps.nexuslauncher
-echo 'chrome --disable-features=AndroidSurfaceControl' > /data/local/tmp/chrome-command-line; chmod 644 /data/local/tmp/chrome-command-line
+echo 'chrome --disable-features=AndroidSurfaceControl --disable-fre' > /data/local/tmp/chrome-command-line; chmod 644 /data/local/tmp/chrome-command-line
 settings put system screen_off_timeout 2147483647
 settings put global stay_on_while_plugged_in 7
 svc power stayon true
@@ -395,7 +395,8 @@ grep -q "^mapengine.glmapview.use-pbo-cull=" "$F" 2>/dev/null || echo "mapengine
 echo provisioned
 '@
     # Chrome on guest ANGLE: SurfaceControl's fences fail and its GPU process restarts every
-    # two seconds without the flag. Dark mode, so ATAK's toasts are readable; SystemUI
+    # two seconds without the flag; --disable-fre, or its welcome screen waits forever on
+    # the Play services switched off above (a Windows PC, 2026-09-30). Dark mode, so ATAK's toasts are readable; SystemUI
     # restarted so it takes it. opengl.broken: ATAK did not stay up on either GPU path
     # without it (DECISIONS 2026-09-27). The CPU terrain cull, as ATAK's own Apple build.
     $argv = @("$($g[2])") + ($TrimApps -split '\s+' | Where-Object { $_ })

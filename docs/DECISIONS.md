@@ -2,6 +2,23 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-09-30: Chrome's welcome screen never finishes without Play services
+
+A bug report from the emulator's own "Bug report" button, a friend's Windows PC (16 GB,
+Android 15, 1830x982): no crash, no ANR; Chrome opened from the dock at 09:35 onto
+`TabbedModeFirstRunActivity`, sat there three minutes, was force-stopped from Settings,
+and opened onto it again. Chrome's log: `GoogleApiManager ... SERVICE_DISABLED`,
+`cr_PolicyLoadListener ... policyServiceInitialized:false`, and `cr_AccountManager: Can't
+use Google Play Services` six times, then nothing: the welcome screen waits for account
+and policy checks that go through Play services, which `EMU_TRIM_APPS` switches off
+(2026-09-26, its location providers flooded the log). Reproduced on the Studio with
+Chrome's data cleared; with `--disable-fre` in `/data/local/tmp/chrome-command-line`
+(read on this debuggable image, `cr_CommandLine: COMMAND-LINE FLAGS`) Chrome went straight
+to a tab and loaded a page, leaving only its notifications question, whose buttons work.
+Written at every boot on both platforms. The same report had the Camera app crashing three
+times on open (`ArrayIndexOutOfBoundsException` in `CameraActivity`): the AVD has no
+cameras (`hw.camera.back=none`), and Google's Camera app does not say so; left as it is.
+
 ## 2026-09-29, late: trackpad pinch on the Mac never reaches Android (measured; work deferred)
 
 `getevent -lt` in Android on the MacBook (recorded over SSH while the operator used the
