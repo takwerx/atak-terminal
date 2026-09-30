@@ -4,19 +4,37 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
-## Unreleased
+## 0.2.3 — 2026-09-29
 
-- **Full screen.** `takwerx fullscreen on` gives ATAK the whole screen. On Windows there is
-  no title bar or taskbar, and F11 (or Ctrl+Alt+F) switches between full screen and a
-  normal window. On a Mac it goes full screen when you click into the window, with the
-  menu bar and Dock hidden; Ctrl+Cmd+F or the green button switches.
-  `takwerx fullscreen off` turns it off.
+- **Full screen.** `takwerx fullscreen on` gives ATAK the whole screen. Android restarts
+  once to take the new size, and from then on ATAK opens full screen.
+  - **Windows:** no title bar, side toolbar or taskbar. **F11** switches between full
+    screen and a normal window. On laptops where F11 is a media key, **Ctrl+Alt+F** does
+    the same.
+  - **Mac:** the usual macOS full screen, with the menu bar and Dock hidden and the map
+    below the notch. **Ctrl+Cmd+F** or the green button switches. The green button now
+    works even with full screen off.
+  - `takwerx fullscreen off` goes back to a normal window.
 - **ATAK is no longer restarted over and over when a plugin makes it pause at start.**
-  When Android reported ATAK not responding, takwerx restarted it right away. A plugin
-  that holds ATAK up for a few seconds while it loads then did the same after every
-  restart, so ATAK restarted every two minutes. takwerx now waits up to 30 seconds and
-  leaves ATAK alone if it recovers. On the Mac and Windows.
-- Windows: `takwerx anr` shows why ATAK last stopped responding, for sending to us.
+  When Android reported ATAK as not responding, takwerx restarted it straight away. A
+  plugin that holds ATAK up for a few seconds while it loads then did the same after
+  every restart, so ATAK restarted every two minutes. takwerx now waits up to 30 seconds
+  and leaves ATAK alone if it recovers by itself. (Seen with an older build of the
+  Atmosphere plugin.)
+- **Windows:** `takwerx anr` shows why ATAK last stopped responding. If ATAK freezes on
+  you, send us what it prints.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data. If you skipped 0.2.1, this update also downloads
+  Android 15 once (about 1.8 GB), so give it a few minutes.
+- **Then, to try full screen:** `takwerx fullscreen on`
+- **New install on a Mac** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
 
 ## 0.2.2 — 2026-09-29
 
