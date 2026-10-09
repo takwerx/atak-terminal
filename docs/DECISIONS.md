@@ -26,6 +26,37 @@ starts, and say what is free, what is needed and where; the pre-download check c
 done: a smaller partition when the disk is short. It would start on less and leave less
 room for ATAK's maps; the operator's call.
 
+## 2026-10-08: "plugins missing from the menu" was the Tools list racing past them
+
+The operator on the MacBook: IPAWS and Feature Layer not in the menu, the Plugins icon
+gone with them, "there for a second", and the trackpad moving the globe instead of the
+list. Measured there over SSH (`reports/andreas-2026-10-08/`, gitignored):
+
+- **Nothing was missing.** All nine plugins loaded at 20:49:39 (clean start, no "Load
+  Plugins?" question), each added its tool. ATAK's Tools menu was in list view, A to Z,
+  scrolled to the bottom; Feature Layer, IPAWS and Plugins sit above the fold.
+- **A trackpad swipe is 20 to 40 `REL_WHEEL` events of 1 at 60 Hz** on the QEMU Virtio
+  Tablet, a mouse click one of 8, and Android's wheel acceleration multiplies fast
+  events up to about 4. On Android 15 ATAK's lists scroll themselves, one notch (64 dp)
+  per event, so a swipe ran the list end to end. On 14 they did not (Cursorwerx's notes,
+  2026-09-26), which is why Cursorwerx 0.1/0.2 only scrolled lists nothing else had.
+  Fixed in Cursorwerx 0.3 (its own repository), not here: every mouse and trackpad fix
+  is in the plugin. The tak.gov-signed 0.3 for 5.8, on official ATAK 5.8.0.5 on the
+  MacBook, with the real trackpad, the same evening: "its working".
+- **The globe "moving while over Tools"**: the Mac cursor and Android's pointer agreed
+  exactly (window at x 1709, scale 2.5). Both swipes that zoomed the globe were made
+  220-300 points left of the Tools panel's edge; every swipe over the panel landed on it.
+- **Testing wheel input without a person**: the emulator's gRPC `injectWheel` gives the
+  same raw events as the trackpad (one `REL_WHEEL` of 1 per message, whatever `dy`), and
+  `sendMouse` positions the pointer. Android ignores the tablet until it has been pressed
+  once (`Last Raw Touch: pointerCount=0`): send one click first. `-grpc-use-token`
+  restricts the port to localhost; the token is in the emulator's `pid_*.ini`.
+- **A trap found on the way, not the cause this time**: when ATAK's last run ended
+  during plugin loading (or within 10 s after), it asks "Load Plugins?" before loading
+  any. That dialog is cancelable (ATAK source 5.5.1.10, `PluginMapComponent`); a click
+  outside it loads no plugins for the session and leaves the question for the next
+  start. With full screen on, the click that activates the window lands in Android.
+
 ## 2026-09-30: Chrome's welcome screen never finishes without Play services
 
 A bug report from the emulator's own "Bug report" button, a friend's Windows PC (16 GB,
