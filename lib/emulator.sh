@@ -75,13 +75,14 @@ emu_license() {
 
 # Free space for what this run downloads and unpacks, checked before any of it (measured
 # here: the emulator 0.39 GB zip, 1.1 unpacked and 1.1 for the private copy; Android 15
-# 1.78 and 3.8 unpacked; both zips stay in the cache) and a new device's data, which ATAK's
-# maps grow. In tenths of a GB. Windows: Test-EmuHost.
+# 1.78 and 3.8 unpacked; both zips stay in the cache) and the 12 GB free the emulator asks
+# for to make a new device's data (emu_data_disk_check), which ATAK's maps then grow. In
+# tenths of a GB. Windows: Test-EmuHost.
 emu_disk_check() {
   local need=0 free
   [ "$(tool_version "$EMU_SDK/emulator")" = "$EMULATOR_VERSION" ] || need=$((need + 26))
   [ "$(tool_version "$EMU_SYSIMG_DIR")" = "$SYSIMG_REV" ] || need=$((need + 56))
-  [ -f "$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" ] || need=$((need + 40))
+  emu_has_data || need=$((need + EMU_DATA_GB * 12))
   [ "$need" -gt 0 ] || return 0
   need=$((need + 20))
   free=$(df -Pk "$TAKWERX_ROOT" | awk 'NR==2 {print int($4 * 10 / 1048576)}')
@@ -345,6 +346,21 @@ emu_sizing() {
   echo "$(clamp $(( $(host_mem_gb) * 1024 / 3 )) 4096 8192) $(clamp $(( $(host_cpus) / 2 )) 2 4)"
 }
 
+# Android's data partition (disk.dataPartition.size). The emulator makes it at a device's
+# first start and wants 1.2 times its size free in the device's folder for that, 12 GB;
+# with less it exits, "Not enough space to create userdata partition", right after its own
+# disk check said OK (a Windows PC with 4 GB left once the downloads were in, DECISIONS
+# 2026-10-09). So takwerx checks that volume first and says what to do. In tenths of a GB,
+# as emu_disk_check. Windows: Test-AvdDiskSpace.
+EMU_DATA_GB=10
+emu_has_data() { [ -f "$EMU_AVD_HOME/$EMU_AVD.avd/userdata-qemu.img" ]; }
+emu_data_disk_check() {
+  local need=$((EMU_DATA_GB * 12)) free
+  emu_has_data && return 0
+  free=$(df -Pk "$EMU_AVD_HOME" | awk 'NR==2 {print int($4 * 10 / 1048576)}')
+  [ "$free" -ge "$need" ] || die "Not enough free disk space for Android's data: $((free / 10)).$((free % 10)) GB free in $EMU_AVD_HOME, and the Android Emulator needs $((need / 10)) GB free there to create it. Free some space, then try again"
+}
+
 emu_avd_create() {
   local dir="$EMU_AVD_HOME/$EMU_AVD.avd" ram cores
   [ -f "$dir/config.ini" ] && return 0
@@ -363,7 +379,7 @@ avd.ini.displayname=TAKwerx ATAK Terminal
 avd.ini.encoding=UTF-8
 PlayStore.enabled=no
 abi.type=arm64-v8a
-disk.dataPartition.size=10G
+disk.dataPartition.size=${EMU_DATA_GB}G
 fastboot.forceColdBoot=yes
 fastboot.forceFastBoot=no
 hw.accelerometer=yes
@@ -479,6 +495,7 @@ emu_start() {
   cmp -s "$EMU_WINDOW_LIB" "$EMU_DIR/lib64/libtakwerx-window.dylib" \
     || cp -f "$EMU_WINDOW_LIB" "$EMU_DIR/lib64/libtakwerx-window.dylib" 2>/dev/null || true
   mkdir -p "$EMU_AVD_HOME"
+  emu_data_disk_check
   emu_avd_create
   rm -f "$EMU_AVD_HOME/$EMU_AVD.avd/"*.lock
   emu_configure_avd

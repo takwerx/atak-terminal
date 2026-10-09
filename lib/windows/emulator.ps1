@@ -66,9 +66,9 @@ function Stop-SoftwareGpu([string]$names) {
 
 # Before anything is downloaded: graphics the emulator will use, and the disk space for
 # what this run fetches. Sizes from Google's zips: the emulator 0.44 GB and 1.1 unpacked,
-# Android 15 1.74 and 3.75 unpacked, both zips kept in the cache; a new device's data
-# grows with ATAK's maps (10 GB on the Mac Studio's oldest). The Mac's twin is
-# emu_disk_check.
+# Android 15 1.74 and 3.75 unpacked, both zips kept in the cache; a new device needs the
+# 12 GB free the emulator asks for to make its data (Test-AvdDiskSpace), which then grows
+# with ATAK's maps (10 GB on the Mac Studio's oldest). The Mac's twin is emu_disk_check.
 function Test-EmuHost {
     $pci = @(Get-HostGpus | Where-Object { $_[1] })
     $bad = @($pci | Where-Object { ($SoftwareGpus -contains $_[1]) -or ($_[0] -match 'Microsoft Basic') })
@@ -82,7 +82,7 @@ function Test-EmuHost {
     $need = 0.0
     if ((Get-ToolVersion $EmuDir) -ne $V.EMULATOR_VERSION) { $need += 1.6 }
     if ((Get-ToolVersion $SysImgDir) -ne $V.SYSIMG_REV) { $need += 5.5 }
-    if (-not (Test-Path (Join-Path $AvdHome "$Avd.avd\config.ini"))) { $need += 4 }
+    if (-not (Test-AvdHasData)) { $need += 1.2 * $AvdDataGB }
     if ($need -eq 0) { return }
     $need += 2
     $drive = Get-PSDrive -Name ((Split-Path $Root -Qualifier).TrimEnd(':'))
@@ -223,6 +223,22 @@ function Get-EmuGeometry {
 # Guest RAM a third of the PC's, 4 to 8 GB; cores half, 2 to 4 (emu_sizing).
 function Get-EmuSizing { return @((Clamp ([int]((Get-HostMemMB) / 3)) 4096 8192), (Clamp ([int]((Get-HostCpus) / 2)) 2 4)) }
 
+# Android's data partition (disk.dataPartition.size). The emulator makes it at a device's
+# first start and wants 1.2 times its size free in the device's folder for that, 12 GB;
+# with less it exits, "Not enough space to create userdata partition", right after its own
+# disk check said OK (a PC with 4 GB left once the downloads were in, DECISIONS
+# 2026-10-09). So takwerx checks that drive first and says what to do. The Mac's twin is
+# emu_data_disk_check.
+$script:AvdDataGB = 10
+function Test-AvdHasData { return (Test-Path (Join-Path $AvdHome "$Avd.avd\userdata-qemu.img")) }
+function Test-AvdDiskSpace {
+    if (Test-AvdHasData) { return }
+    $need = 1.2 * $AvdDataGB
+    try { $drive = Get-PSDrive -Name ((Split-Path $AvdHome -Qualifier).TrimEnd(':')) } catch { return }
+    $free = $drive.Free / 1GB
+    if ($free -lt $need) { Die ("Not enough free disk space for Android's data: {0:N1} GB free on {1}, and the Android Emulator needs {2:N0} GB free there to create it ({3}). Free some space on {1}, then try again" -f $free, $drive.Root, $need, $AvdHome) }
+}
+
 function New-Avd {
     $dir = Join-Path $AvdHome "$Avd.avd"
     if (Test-Path (Join-Path $dir 'config.ini')) { return }
@@ -233,7 +249,7 @@ function New-Avd {
         'avd.ini.encoding=UTF-8', "path=$dir", "path.rel=avd\$Avd.avd", "target=android-$($V.SYSIMG_API)")
     Set-Content -Path (Join-Path $dir 'config.ini') -Encoding ASCII -Value @(
         "AvdId=$Avd", "avd.ini.displayname=$AppName", 'avd.ini.encoding=UTF-8', 'PlayStore.enabled=no',
-        'abi.type=x86_64', 'disk.dataPartition.size=10G', 'fastboot.forceColdBoot=yes', 'fastboot.forceFastBoot=no',
+        'abi.type=x86_64', "disk.dataPartition.size=$($AvdDataGB)G", 'fastboot.forceColdBoot=yes', 'fastboot.forceFastBoot=no',
         'hw.accelerometer=yes', 'hw.arc=false', 'hw.audioInput=yes', 'hw.audioOutput=yes', 'hw.battery=yes',
         'hw.camera.back=none', 'hw.camera.front=none', 'hw.cpu.arch=x86_64', "hw.cpu.ncore=$($s[1])", 'hw.dPad=no',
         'hw.gps=yes', 'hw.gpu.enabled=yes', 'hw.gpu.mode=host', 'hw.gsmModem=yes', 'hw.gyroscope=yes',
@@ -329,6 +345,7 @@ function Start-Emu {
         Where-Object { $_.CommandLine -match ('-port\s+' + $EmuPort + '(\s|$)') } | Select-Object -First 1
     if ($other) { Die ("Another Android Emulator is running (process {0}); close its window or stop it first, then try again" -f $other.ProcessId) }
     New-Item -ItemType Directory -Force -Path $AvdHome | Out-Null
+    Test-AvdDiskSpace
     New-Avd
     Get-ChildItem (Join-Path $AvdHome "$Avd.avd") -Filter '*.lock' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
     Set-AvdConfig
