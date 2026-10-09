@@ -4,6 +4,22 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## 0.2.6 — 2026-10-09
+
+- **Mac: the window has its title-bar buttons again.** The red, yellow and green buttons
+  at the top left of the ATAK window are always there now, including after you move the
+  window to another display. The green one takes ATAK full screen.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
+
 ## 0.2.5 — 2026-09-30
 
 - **Chrome no longer gets stuck on its welcome screen.** Opened for the first time,
