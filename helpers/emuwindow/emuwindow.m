@@ -70,8 +70,19 @@ static void makeCapable(NSWindow *w) {
              w.title, NSStringFromRect(w.frame), (unsigned long)b, (unsigned long)want,
              (unsigned long)w.styleMask, (unsigned long)w.childWindows.count, w.parentWindow ? @"yes" : @"no");
     }
-    NSButton *zoom = [w standardWindowButton:NSWindowZoomButton];
-    if (zoom && !zoom.enabled) { zoom.enabled = YES; note(@"green button enabled"); }
+    // The title bar's three buttons, kept shown and enabled. The emulator starts its main
+    // window with all three hidden (its side toolbar has its own close and minimize; the
+    // Studio, 2026-10-09), and Qt 6.5 hides them again whenever it re-applies the window's
+    // flags, as when the window moves between displays: on the MacBook with a second
+    // display the window had none (2026-10-09), so no green button for full screen.
+    NSWindowButton kinds[] = { NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton };
+    NSString *names[] = { @"close", @"minimize", @"green" };
+    for (int i = 0; i < 3; i++) {
+        NSButton *button = [w standardWindowButton:kinds[i]];
+        if (!button) continue;
+        if (button.hidden) { button.hidden = NO; note(@"%@ button shown again", names[i]); }
+        if (!button.enabled) { button.enabled = YES; note(@"%@ button enabled", names[i]); }
+    }
 }
 
 static void showTools(void);
