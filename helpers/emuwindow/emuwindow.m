@@ -137,6 +137,25 @@ static void hideTools(NSWindow *main) {
     }
 }
 
+// On a display whose shape differs from Android's, the emulator keeps the picture's
+// proportions and its full-screen window comes out narrower than the screen, and macOS
+// leaves it at the left edge: 1718 of the MB16A's 1920 points, a black strip on the right
+// only (2026-10-09). Centred instead, the strip split between both sides. The full-screen
+// area is the screen less a MacBook's notch band. Checked again after a moment, as the
+// emulator may resize its window after the transition.
+static void centre(NSWindow *w) {
+    if (!isFull(w) || !w.screen) return;
+    NSRect s = w.screen.frame, f = w.frame;
+    CGFloat top = 0;
+    if (@available(macOS 12.0, *)) top = w.screen.safeAreaInsets.top;
+    CGFloat x = s.origin.x + floor((s.size.width - f.size.width) / 2);
+    CGFloat y = s.origin.y + floor((s.size.height - top - f.size.height) / 2);
+    if (fabs(f.origin.x - x) < 2 && fabs(f.origin.y - y) < 2) return;
+    [w setFrameOrigin:NSMakePoint(x, y)];
+    note(@"full screen: window %@ centred on screen %@, now %@", NSStringFromRect(f),
+         NSStringFromRect(s), NSStringFromRect(w.frame));
+}
+
 static void showTools(void) {
     for (NSWindow *w in hiddenTools) [w orderFront:nil];
     if (hiddenTools.count) note(@"toolbar shown again");
@@ -167,8 +186,12 @@ static void start(void) {
     [nc addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:nil usingBlock:^(NSNotification *n) {
         everFull = YES;
         transitions++;
-        note(@"full screen: window %@", NSStringFromRect(((NSWindow *)n.object).frame));
-        hideTools(n.object);
+        NSWindow *w = n.object;
+        note(@"full screen: window %@", NSStringFromRect(w.frame));
+        hideTools(w);
+        centre(w);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 2), dispatch_get_main_queue(), ^{ centre(w); });
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ centre(w); });
     }];
     [nc addObserverForName:NSWindowWillExitFullScreenNotification object:nil queue:nil usingBlock:^(NSNotification *n) {
         note(@"macOS is taking the window out of full screen");
