@@ -87,8 +87,9 @@ reason if the computer falls short.
 
 **Both**
 
-- About 15 GB of free disk for the first install: about 7 GB for Google's emulator and
-  Android, the rest for Android's own data. ATAK's maps need more as they grow.
+- About 23 GB of free disk for the first install: about 8 GB for Google's emulator and
+  Android, 12 GB that the emulator wants free before it creates Android's own data, and
+  some room to spare. ATAK's maps need more as they grow.
 - An internet connection for the first run.
 - The ATAK-CIV APK from [tak.gov](https://tak.gov/products/atak-civ). ATAK is not
   redistributed here and cannot be fetched for you; you download it once and takwerx

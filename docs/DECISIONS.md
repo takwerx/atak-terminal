@@ -2,6 +2,30 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-10-09: the emulator wants 1.2 times the data partition free before it makes it
+
+Issue #1, a Windows 11 Home PC (64 GB, 32 cores, RTX 4080 SUPER) on 0.2.1, before the
+pre-download disk check existed (6742cd9, 0.2.2): the first `takwerx init` downloaded the
+emulator and Android 15, created the device and started it, and 34 s later said Android did
+not come up. The emulator's log:
+every compatibility check Ok, `hasSufficientDiskSpace` included, then `FATAL | Not enough
+space to create userdata partition. Available: 3993.67 MB at
+...\takwerx\avd\..\avd\terminal.avd, need 12288.00 MB.` A second `init` seven minutes
+later booted, so space had been freed in between. The rule is the emulator's own
+(`android-qemu2-glue/main.cpp`): at first-time setup, and only while `userdata-qemu.img`
+does not exist, it wants 1.2 times `disk.dataPartition.size` free in the device's folder,
+12288 MB for our 10G (reports elsewhere show 7372.8 MB for the 6 GB default); when it
+cannot read the free space it carries on. The image it then makes starts small and grows
+as Android writes (an AVD on the Studio: `userdata-qemu.img` 10 MB, its qcow2 overlay
+11 GB after weeks of use), so the 12 GB is a demand, not what it costs. takwerx's
+pre-download check counted 4 GB for a new device, so a PC with 13 to 19 GB free passed it
+and would still fail this way after the downloads. Now `Test-AvdDiskSpace` (Windows) and
+`emu_data_disk_check` (Mac) check the device folder's drive before a device without data
+starts, and say what is free, what is needed and where; the pre-download check counts the
+12 GB, so a first install asks for about 21 GB on Windows and 23 on the Mac (README). Not
+done: a smaller partition when the disk is short. It would start on less and leave less
+room for ATAK's maps; the operator's call.
+
 ## 2026-09-30: Chrome's welcome screen never finishes without Play services
 
 A bug report from the emulator's own "Bug report" button, a friend's Windows PC (16 GB,
