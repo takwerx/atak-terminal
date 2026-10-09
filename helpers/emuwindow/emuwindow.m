@@ -215,6 +215,9 @@ static void start(void) {
         NSWindow *w = mainWindow();
         if (!w || w.frame.size.width < 200) return;
         makeCapable(w);
+        // Something put the window back at the left edge half a second after the first
+        // centring on the MB16A; kept centred for the whole session, not just its entry.
+        centre(w);
         NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
         if (!seenAt) seenAt = now;
         if (!armed || now - seenAt < 2) return;
