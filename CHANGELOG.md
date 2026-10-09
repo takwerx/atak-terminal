@@ -4,6 +4,23 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## 0.2.7 — 2026-10-09
+
+- **Mac: full screen on an external monitor is centred.** On a monitor shaped
+  differently from your Mac's screen, ATAK keeps its proportions in full screen, and the
+  spare width showed as one black strip on the right. The map now sits in the middle,
+  with an even strip on each side. On the Mac's own screen nothing changes.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
+
 ## 0.2.6 — 2026-10-09
 
 - **Mac: the window has its title-bar buttons again.** The red, yellow and green buttons
