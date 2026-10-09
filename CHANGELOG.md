@@ -4,13 +4,23 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
-## Unreleased
+## 0.2.8 — 2026-10-09
 
 - **Too little free disk space is now said plainly.** Google's emulator wants 12 GB free
   before it creates Android's data the first time, and with less it quit, leaving only
   "Android did not come up". takwerx now checks for that before it downloads anything and
   again before Android's first start, and says how much space is free, how much is
   needed, and where. A new install needs about 23 GB free.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
 
 ## 0.2.7 — 2026-10-09
 
