@@ -24,18 +24,21 @@ host_check() {
 }
 
 # Lima (the VM manager) and scrcpy (the window, with its own adb) are downloaded from their
-# GitHub releases at pinned versions. Nothing is installed system-wide and Homebrew is not used.
+# GitHub releases at pinned versions and SHA-256s. Nothing is installed system-wide and
+# Homebrew is not used.
 host_tools_install() {
-  local tgz
+  local tgz sum
   if [ "$(tool_version "$LIMA_DIR")" != "$LIMA_VERSION" ]; then
     tgz="$TAKWERX_CACHE/lima-$LIMA_VERSION-Darwin-$HOST_ARCH.tar.gz"
-    download "https://github.com/lima-vm/lima/releases/download/v$LIMA_VERSION/lima-$LIMA_VERSION-Darwin-$HOST_ARCH.tar.gz" "$tgz"
+    sum=$(pin_sha256 LIMA) || exit 1
+    download "https://github.com/lima-vm/lima/releases/download/v$LIMA_VERSION/lima-$LIMA_VERSION-Darwin-$HOST_ARCH.tar.gz" "$tgz" "$sum"
     unpack_to "$tgz" "$LIMA_DIR" "$LIMA_VERSION"
   fi
   ok "Lima $LIMA_VERSION"
   if [ "$(tool_version "$SCRCPY_DIR")" != "$SCRCPY_VERSION" ]; then
     tgz="$TAKWERX_CACHE/scrcpy-macos-$SCRCPY_ARCH-v$SCRCPY_VERSION.tar.gz"
-    download "https://github.com/Genymobile/scrcpy/releases/download/v$SCRCPY_VERSION/scrcpy-macos-$SCRCPY_ARCH-v$SCRCPY_VERSION.tar.gz" "$tgz"
+    sum=$(pin_sha256 SCRCPY) || exit 1
+    download "https://github.com/Genymobile/scrcpy/releases/download/v$SCRCPY_VERSION/scrcpy-macos-$SCRCPY_ARCH-v$SCRCPY_VERSION.tar.gz" "$tgz" "$sum"
     unpack_to "$tgz" "$SCRCPY_DIR" "$SCRCPY_VERSION" 1
   fi
   ok "scrcpy $SCRCPY_VERSION"
@@ -109,8 +112,10 @@ bridged_setup() {
     return 1
   fi
   step "Bridged networking on $iface (asks for your Mac password once)"
-  local tgz="$TAKWERX_CACHE/socket_vmnet-$SOCKET_VMNET_VERSION-$HOST_ARCH.tar.gz"
-  download "https://github.com/lima-vm/socket_vmnet/releases/download/v$SOCKET_VMNET_VERSION/socket_vmnet-$SOCKET_VMNET_VERSION-$HOST_ARCH.tar.gz" "$tgz"
+  local tgz="$TAKWERX_CACHE/socket_vmnet-$SOCKET_VMNET_VERSION-$HOST_ARCH.tar.gz" sum
+  sum=$(pin_sha256 SOCKET_VMNET) || exit 1
+  # Verified before sudo unpacks it into / as root.
+  download "https://github.com/lima-vm/socket_vmnet/releases/download/v$SOCKET_VMNET_VERSION/socket_vmnet-$SOCKET_VMNET_VERSION-$HOST_ARCH.tar.gz" "$tgz" "$sum"
   # socket_vmnet must exist before Lima will generate the sudoers rule for it. sudo caches
   # the password, so the two calls are one prompt.
   sudo -p "Password for %u (bridged networking): " bash -c "

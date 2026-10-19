@@ -121,20 +121,22 @@ function Start-Background {
 }
 
 # ---- downloads ------------------------------------------------------------------------------
-function Get-Sha1([string]$path) { return (Get-FileHash -Algorithm SHA1 -Path $path).Hash.ToLowerInvariant() }
+function Get-Sha256([string]$path) { return (Get-FileHash -Algorithm SHA256 -Path $path).Hash.ToLowerInvariant() }
 
-# Get-Download URL DEST [SHA1]: curl.exe, which shows real progress (Invoke-WebRequest
-# crawls on large files), skipped when DEST is already there and verifies.
-function Get-Download([string]$url, [string]$dest, [string]$sha1 = '') {
-    if ((Test-Path $dest) -and ((-not $sha1) -or ((Get-Sha1 $dest) -eq $sha1))) { return }
+# Get-Download URL DEST [SHA256]: curl.exe, which shows real progress (Invoke-WebRequest
+# crawls on large files), skipped when DEST is already there and verifies. A cached DEST that
+# does not match is fetched again; a download that does not match is deleted and refused
+# before anything uses it.
+function Get-Download([string]$url, [string]$dest, [string]$sha256 = '') {
+    if ((Test-Path $dest) -and ((-not $sha256) -or ((Get-Sha256 $dest) -eq $sha256))) { return }
     Step ("Downloading " + (Split-Path $dest -Leaf))
     $part = "$dest.part"
     $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try { & curl.exe -fL --retry 3 --retry-delay 2 -o $part $url } finally { $ErrorActionPreference = $old }
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $part)) { Remove-Item $part -ErrorAction SilentlyContinue; Die "Download failed: $url" }
-    if ($sha1) {
-        $have = Get-Sha1 $part
-        if ($have -ne $sha1) { Remove-Item $part -Force; Die ("Checksum mismatch for {0} (got {1}, want {2}); the download is deleted, run again" -f (Split-Path $dest -Leaf), $have, $sha1) }
+    if ($sha256) {
+        $have = Get-Sha256 $part
+        if ($have -ne $sha256) { Remove-Item $part -Force; Die ("Refused {0}: its SHA-256 is {1}, but versions.env pins {2}. The file is deleted and nothing was installed. Run the command again; if this repeats, the download is being altered on the way, so report it" -f (Split-Path $dest -Leaf), $have, $sha256) }
     }
     Move-Item -Force $part $dest
 }
