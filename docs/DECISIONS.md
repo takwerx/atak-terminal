@@ -2,6 +2,25 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-10-20: scrcpy 5.0.1, hardware video decoding
+
+scrcpy 5.0 decodes with VideoToolbox on macOS by default (5.0.1 fixes hardware-decoding
+bugs) and brings adb 37.0.1, the same as Windows' platform-tools pin; 4.1 had 37.0.0.
+Measured on the redroid runtime (Apple Silicon, Lima 2.2.1 VM, Android 14 at 2560x1440,
+ATAK 5.8 with its globe panned by adb swipes for 30 s, the same workload each time, the
+window opened by `window_open` as `takwerx up` does):
+
+- **5.0.1:** `Video decoding: videotoolbox`, about 16 fps, the Mac's scrcpy at 1.7 % of
+  one core.
+- **4.1:** about 16 fps, 7.0 %.
+- **5.0.1 with `--hwdec=disabled`:** `Video decoding: software`, about 16 fps, 7.0 %. That
+  is the fallback if VideoToolbox misbehaves on some Mac. The engine does not set it, and
+  no takwerx option passes it yet.
+
+So about four times less CPU here, not the ten upstream quotes: redroid encodes in
+software and gives about 16 fps when the map moves, so there is less to decode. Nothing in
+the engine's scrcpy flags changed; `--keyboard=uhid` opens and holds the session as on 4.1.
+
 ## 2026-10-19: every download pinned by SHA-256, redroid by digest, Lima 2.2.1
 
 Supply-chain hardening, no advisory against our versions. Lima, scrcpy and socket_vmnet
