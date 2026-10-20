@@ -230,22 +230,28 @@ container_start() {
 # ATAK takes no quit from outside. Its QUITAPP action is registered on AtakBroadcast, ATAK's
 # in-process bus (ATAKActivity.preLoadAssets), so `am broadcast` is delivered to nobody; that
 # is all this function did until 2026-09-27, and callers carried on as if ATAK had exited
-# (DECISIONS 2026-09-27). So ATAK is sent home first, which runs its onPause and onStop:
-# pending preferences are written and state saved, as when a user switches apps. Then the
-# process is stopped; `am kill` spares a process with a foreground service, and ATAK keeps
-# one, so it is force-stop, what Android itself does to a backgrounded app it needs gone.
+# (DECISIONS 2026-09-27). So ATAK's task is removed, as a user swiping it out of Recents
+# does: Android runs onPause, onStop and onDestroy, ATAK shuts down as when it quits
+# itself, and the process is killed after. A force-stop skips onDestroy, where ATAK marks
+# its exit clean, so it asked "Load Plugins? ATAK exited uncleanly" after a stop in its
+# first seconds, and again at every start until someone answered (2026-10-20). Force-stop
+# stays the fallback: `am kill` spares a process with a foreground service, and ATAK keeps one.
 atak_quit() {
   atak_running || return 0
-  adb_sh input keyevent KEYCODE_HOME >/dev/null 2>&1 || true
-  sleep 2
+  local task i
+  task=$(adb_sh am stack list 2>/dev/null | awk -v p=" $ATAK_PACKAGE/" '/^RootTask id=/ { sub(/^RootTask id=/, ""); id = $1 } /taskId=/ && index($0, p) { print id; exit }')
+  if [ -n "$task" ]; then
+    adb_sh am stack remove "$task" >/dev/null 2>&1 || true
+    for i in 1 2 3 4 5 6 7 8 9 10; do atak_running || return 0; sleep 1; done
+  fi
   adb_sh am force-stop "$ATAK_PACKAGE" >/dev/null 2>&1 || true
-  local i; for i in 1 2 3 4 5; do atak_running || return 0; sleep 1; done
+  for i in 1 2 3 4 5; do atak_running || return 0; sleep 1; done
   warn "ATAK is still running after being stopped"
 }
 container_stop() {
   if container_running; then
     step "Stopping Android"
-    # ATAK is stopped first (atak_quit: home, so it saves, then force-stop); then Android's
+    # ATAK is stopped first (atak_quit: its own clean shutdown); then Android's
     # init ignores SIGTERM, so sync the filesystems and let podman kill it quickly. The kill
     # skips Android's own shutdown, so pending app-op grants (any the user gave inside
     # Android) are written first (atak_grant).
