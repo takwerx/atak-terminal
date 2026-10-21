@@ -246,8 +246,11 @@ container_stop() {
   if container_running; then
     step "Stopping Android"
     # ATAK is stopped first (atak_quit: home, so it saves, then force-stop); then Android's
-    # init ignores SIGTERM, so sync the filesystems and let podman kill it quickly.
+    # init ignores SIGTERM, so sync the filesystems and let podman kill it quickly. The kill
+    # skips Android's own shutdown, so pending app-op grants (any the user gave inside
+    # Android) are written first (atak_grant).
     atak_quit
+    adb_sh appops write-settings >/dev/null 2>&1 || true
     adb_sh sync >/dev/null 2>&1 || true
     vm_run "podman stop -t 3 $CONTAINER_NAME >/dev/null 2>&1" || warn "Android stop reported an error"
   fi
@@ -285,6 +288,9 @@ android_provision() {
     adb_sh cmd overlay disable com.android.internal.systemui.navbar.threebutton >/dev/null 2>&1 || true
     sleep 3
   fi
+  # A restart, and every bridged start, recreates the container; ATAK's grants are applied
+  # again here as emu_provision does, so it never asks for all-files access (2026-10-20).
+  if atak_installed; then atak_grant; fi
 }
 
 # ATAK shows atak/support/atak_splash.png (under 4096 px a side) in place of its own splash
@@ -344,14 +350,18 @@ atak_install() {
 # Grants everything ATAK would otherwise ask for on first run, including the two that
 # live outside the runtime-permission model: all-files access and installing APKs.
 # The second is what lets the TAKWERX Market plugin update plugins from inside ATAK.
-# One adb round trip: it also runs at every boot (emu_provision), since ATAK asked for file
-# access again after a restart on Windows (2026-09-27).
+# One adb round trip: it also runs at every boot (emu_provision, android_provision), since
+# ATAK asked for file access again after a restart on Windows (2026-09-27).
+# Android keeps app-op changes in memory and writes appops.xml up to 30 minutes later, or at
+# a clean shutdown; redroid is stopped with a kill, so a grant was lost with the container
+# (2026-10-20, measured: no appops.xml on disk after install). write-settings writes it now.
 atak_grant() {
   adb_sh "P=$ATAK_PACKAGE
     for op in MANAGE_EXTERNAL_STORAGE REQUEST_INSTALL_PACKAGES SYSTEM_ALERT_WINDOW; do appops set \$P \$op allow >/dev/null 2>&1; done
     for perm in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION ACCESS_BACKGROUND_LOCATION POST_NOTIFICATIONS \
       READ_EXTERNAL_STORAGE WRITE_EXTERNAL_STORAGE CAMERA RECORD_AUDIO READ_PHONE_STATE \
-      BLUETOOTH_CONNECT BLUETOOTH_SCAN NEARBY_WIFI_DEVICES; do pm grant \$P android.permission.\$perm >/dev/null 2>&1; done; true" >/dev/null 2>&1 || true
+      BLUETOOTH_CONNECT BLUETOOTH_SCAN NEARBY_WIFI_DEVICES; do pm grant \$P android.permission.\$perm >/dev/null 2>&1; done
+    appops write-settings >/dev/null 2>&1; true" >/dev/null 2>&1 || true
 }
 
 plugin_install() {

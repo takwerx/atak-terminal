@@ -347,6 +347,17 @@ desktop shortcuts. Measured and decided on the way:
 - **ATAK asked for file access again after a restart on the Dell.** Android keeps granted
   permissions across a reboot, so the cause is not known yet; ATAK's permissions are now
   granted again at every boot on both engines (one adb round trip on the Mac, 1 s).
+  Cause found 2026-10-20, on redroid, which did not get the per-boot grant: all-files
+  access is an app op, not a permission, and Android keeps app-op changes in memory and
+  writes `/data/system/appops.xml` up to 30 minutes later or at a clean shutdown. A fresh
+  install had no appops.xml at all; `podman stop` kills Android, so after `takwerx restart`
+  (and every bridged start) the op read `default` and ATAK showed "File System Access
+  Changes". After `appops write-settings` the file exists and the grant survives the
+  recreate. Now `atak_grant` ends with `write-settings`, `android_provision` runs it at
+  every start as `emu_provision` does, and `container_stop` writes app ops before the kill,
+  so an op the user sets inside Android is kept too (measured with the Market's
+  RUN_ANY_IN_BACKGROUND). Untested on Windows: `Grant-Atak` is unchanged, and the emulator's own
+  power-off writes app ops anyway.
 - **Range-and-bearing drag on Windows:** fine after all (operator, later the same night).
 - **ATAK updated from 5.7 to 5.8 through the Market, inside the Windows engine.** Official
   ATAK-CIV 5.7.0.3 on the Dell, the Market's two-step handoff (its own 5.8 build first, then
