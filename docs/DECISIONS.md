@@ -50,6 +50,38 @@ matches is fetched again. Where each hash came from is noted in `versions.env`:
   ours, chosen by ATAK version at run time) and takwerx's own source (`install.sh`,
   `takwerx update`, the tag named by `VERSION`). Both are first-party and move by design.
 
+## 2026-10-15: Cursorwerx 0.3's list pace held only for slow wheel input
+
+The operator, Cursorwerx 0.3 on the MacBook: the wheel over ATAK's Tools list still did
+not show all the plugins; a click-and-drag did. Measured there over SSH
+(`reports/andreas-2026-10-15/`, gitignored):
+
+- **Two plugins really are not in the list, by ATAK's design.** CamDepot and Atmosphere
+  are pinned to the toolbar (the active loadout's `buttons=` in ATAK's preferences), and
+  ATAK's Tools list leaves out everything on the toolbar, as it leaves out Overlay
+  Manager, Maps and Red X. Eight of the ten installed plugins are in the list.
+- **Android multiplies wheel events by up to 4 when they come fast**
+  (`wheelVelocityControlParameters(1, 15, 50, 4)`: an LSQ2 speed over the last 100 ms
+  of raw travel, x1 at 15 units/s or less, x4 at 50 or more; a 40 ms gap resets the speed,
+  500 ms the position). A trackpad's 60 Hz of 1 is always x4, and so is a mouse wheel spun
+  with clicks under 40 ms apart. 0.3 was measured with input slower than 40 ms an event,
+  so it never saw it: a 37-event swipe at 60 Hz ran the MacBook's Tools list 21 rows
+  (2,880 px), past Feature Layer, IPAWS and Map Depot.
+- **Fixed in Cursorwerx 0.4** (its own repository, branch `cursorwerx-v0.4`): it replays
+  Android's bookkeeping and recovers each event's whole raw value before scrolling a
+  list. On the emulator with dev ATAK 5.8.0.3, debug and release: Android delivered -1
+  then -4 x36, Cursorwerx recovered -1 each time, the swipe moved 740 px (5.5 rows), a
+  mouse click 160 px slow or fast. Map zoom unchanged (still a step per 90 ms at most).
+- **Wheel input at real speed without a person**: `sendevent` costs about 35 ms a call,
+  under the 40 ms reset, so it never triggers acceleration. Writing each REL_WHEEL+SYN
+  pair (two 24-byte `input_event`s) to `/dev/input/event1` with the shell's builtin
+  `print -nu3`, paced by `read -t` on a FIFO, gives 16-18 ms. Both tablet axes span
+  3024 px on a 3024x1900 display. Android positions the pointer from the tablet only
+  while the pen tool (`BTN_TOOL_PEN`, 320) is held, as the emulator holds it for a host
+  cursor; without it a press lands where the pointer already was. Setting it by hand in
+  the middle of a stream aborted InputDispatcher (a userdebug check) and restarted the
+  system. While the stylus hovers, `input tap` is ignored; click with the tablet.
+
 ## 2026-10-09: the emulator wants 1.2 times the data partition free before it makes it
 
 Issue #1, a Windows 11 Home PC (64 GB, 32 cores, RTX 4080 SUPER) on 0.2.1, before the
