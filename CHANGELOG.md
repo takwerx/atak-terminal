@@ -4,6 +4,33 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## 0.2.9 — 2026-10-21
+
+- **Every download is checked before it is used.** Each file takwerx downloads (Lima,
+  scrcpy, the emulator, Android, MoltenVK, socket_vmnet, platform-tools) now has to match
+  a SHA-256 fingerprint pinned in takwerx, and the redroid image is pulled by its digest.
+  A file that doesn't match is deleted and takwerx stops with a clear message, before
+  anything is unpacked or run. Lima goes from 2.2.0 to 2.2.1 (upstream hardening).
+- **The redroid window uses the Mac's video hardware.** scrcpy goes from 4.1 to 5.0.1,
+  which decodes the picture with the GPU: about a quarter of the CPU it used before. Its
+  adb is 37.0.1, the same as on Windows.
+- **ATAK no longer asks for file access after a restart** (redroid runtime). Android saved
+  the "All files access" grant only after a delay, and stopping Android lost it; takwerx
+  now saves it at once and grants it again at every start.
+
+On `takwerx update`, Lima 2.2.1 is downloaded (about 37 MB). Your VM, Android and ATAK's
+data stay as they are.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
+
 ## 0.2.8 — 2026-10-09
 
 - **Too little free disk space is now said plainly.** Google's emulator wants 12 GB free
