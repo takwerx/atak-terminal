@@ -113,16 +113,17 @@ function Confirm-SdkLicense {
     Set-Conf 'ANDROID_SDK_LICENSE' 'accepted'
 }
 
-# A download already on this PC with the right checksum is used instead of fetching it
+# A download already on this PC with the right SHA-256 is used instead of fetching it
 # again: takwerx's cache, or the measuring script's folder (tools/windows-measure.ps1).
-function Get-Pinned([string]$url, [string]$name, [string]$sha1, [string[]]$seeds) {
+function Get-Pinned([string]$url, [string]$name, [string]$sha256, [string[]]$seeds) {
+    if (-not $sha256) { Die "versions.env has no SHA-256 for $name" }
     $dest = Join-Path $Cache $name
     if (-not (Test-Path $dest)) {
         foreach ($s in $seeds) {
-            if ((Test-Path $s) -and (Get-Sha1 $s) -eq $sha1) { Copy-Item $s $dest; Ok "Reusing $s"; break }
+            if ((Test-Path $s) -and (Get-Sha256 $s) -eq $sha256) { Copy-Item $s $dest; Ok "Reusing $s"; break }
         }
     }
-    Get-Download $url $dest $sha1
+    Get-Download $url $dest $sha256
     return $dest
 }
 
@@ -131,7 +132,7 @@ function Install-EmuSdk {
     if ((Get-ToolVersion $EmuDir) -ne $V.EMULATOR_VERSION) {
         Confirm-SdkLicense
         $zip = Get-Pinned "https://dl.google.com/android/repository/emulator-windows_x64-$($V.EMULATOR_BUILD).zip" `
-            "emulator-windows_x64-$($V.EMULATOR_BUILD).zip" $V.EMULATOR_WIN_SHA1 @((Join-Path $measure 'emu.zip'))
+            "emulator-windows_x64-$($V.EMULATOR_BUILD).zip" $V.EMULATOR_WIN_SHA256 @((Join-Path $measure 'emu.zip'))
         Step "Unpacking the emulator $($V.EMULATOR_VERSION)"
         if (Test-Path $EmuDir) { Remove-Item -Recurse -Force $EmuDir }
         Expand-Zip $zip $Sdk
@@ -144,7 +145,7 @@ function Install-EmuSdk {
     if ((Get-ToolVersion $SysImgDir) -ne $V.SYSIMG_REV) {
         Confirm-SdkLicense
         $zip = Get-Pinned "https://dl.google.com/android/repository/sys-img/$($V.SYSIMG_TAG)/x86_64-$($V.SYSIMG_API)_r$($V.SYSIMG_REV).zip" `
-            "x86_64-$($V.SYSIMG_API)_r$($V.SYSIMG_REV).zip" $V.SYSIMG_X86_SHA1 @((Join-Path $measure 'sysimg.zip'))
+            "x86_64-$($V.SYSIMG_API)_r$($V.SYSIMG_REV).zip" $V.SYSIMG_X86_SHA256 @((Join-Path $measure 'sysimg.zip'))
         Step "Unpacking Android $($V.SYSIMG_API) (1.5 GB, a minute or two)"
         $parent = Split-Path $SysImgDir -Parent
         if (Test-Path $SysImgDir) { Remove-Item -Recurse -Force $SysImgDir }
@@ -155,7 +156,7 @@ function Install-EmuSdk {
     Ok "Android $($V.SYSIMG_API) system image r$($V.SYSIMG_REV)"
     if ((Get-ToolVersion $PtDir) -ne $V.PLATFORM_TOOLS_WIN_VERSION) {
         $zip = Get-Pinned "https://dl.google.com/android/repository/platform-tools_r$($V.PLATFORM_TOOLS_WIN_VERSION)-win.zip" `
-            "platform-tools_r$($V.PLATFORM_TOOLS_WIN_VERSION)-win.zip" $V.PLATFORM_TOOLS_WIN_SHA1 @()
+            "platform-tools_r$($V.PLATFORM_TOOLS_WIN_VERSION)-win.zip" $V.PLATFORM_TOOLS_WIN_SHA256 @()
         if (Test-Path $Adb) { [void](Invoke-Quiet $Adb 'kill-server') }
         if (Test-Path $PtDir) { Remove-Item -Recurse -Force $PtDir }
         Expand-Zip $zip $Sdk

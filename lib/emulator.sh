@@ -90,22 +90,14 @@ emu_disk_check() {
   ok "Disk: $((free / 10)) GB free"
 }
 
-sha1_of() { shasum -a 1 "$1" | cut -d' ' -f1; }
-verify_sha1() {
-  local file=$1 want=$2 have
-  have=$(sha1_of "$file")
-  [ "$have" = "$want" ] || { rm -f "$file"; die "Checksum mismatch for $(basename "$file") (got $have, want $want); the download is deleted, run again"; }
-}
-
 # Emulator, system image and MoltenVK into ~/.takwerx/tools, each with a .version, each
-# re-fetched only when its pin changes.
+# re-fetched only when its pin changes and verified against its SHA-256 by download.
 emu_sdk_install() {
   local zip tmp
   if [ "$(tool_version "$EMU_SDK/emulator")" != "$EMULATOR_VERSION" ]; then
     emu_license
     zip="$TAKWERX_CACHE/emulator-darwin_aarch64-$EMULATOR_BUILD.zip"
-    download "https://dl.google.com/android/repository/emulator-darwin_aarch64-$EMULATOR_BUILD.zip" "$zip"
-    verify_sha1 "$zip" "$EMULATOR_SHA1"
+    download "https://dl.google.com/android/repository/emulator-darwin_aarch64-$EMULATOR_BUILD.zip" "$zip" "$EMULATOR_SHA256"
     step "Unpacking the emulator $EMULATOR_VERSION"
     tmp=$(mktemp -d "$TAKWERX_CACHE/unpack.XXXXXX")
     unzip -q -o "$zip" -d "$tmp" || die "Could not unpack $(basename "$zip")"
@@ -117,8 +109,7 @@ emu_sdk_install() {
   if [ "$(tool_version "$EMU_SYSIMG_DIR")" != "$SYSIMG_REV" ]; then
     emu_license
     zip="$TAKWERX_CACHE/arm64-v8a-${SYSIMG_API}_r$SYSIMG_REV.zip"
-    download "https://dl.google.com/android/repository/sys-img/$SYSIMG_TAG/arm64-v8a-${SYSIMG_API}_r$SYSIMG_REV.zip" "$zip"
-    verify_sha1 "$zip" "$SYSIMG_SHA1"
+    download "https://dl.google.com/android/repository/sys-img/$SYSIMG_TAG/arm64-v8a-${SYSIMG_API}_r$SYSIMG_REV.zip" "$zip" "$SYSIMG_SHA256"
     step "Unpacking Android $SYSIMG_API"
     tmp=$(mktemp -d "$TAKWERX_CACHE/unpack.XXXXXX")
     unzip -q -o "$zip" -d "$tmp" || die "Could not unpack $(basename "$zip")"
@@ -128,8 +119,7 @@ emu_sdk_install() {
   ok "Android $SYSIMG_API system image r$SYSIMG_REV"
   if [ "$(tool_version "$EMU_MVK_DIR")" != "$MOLTENVK_VERSION" ]; then
     zip="$TAKWERX_CACHE/MoltenVK-macos-$MOLTENVK_VERSION.tar"
-    download "https://github.com/KhronosGroup/MoltenVK/releases/download/v$MOLTENVK_VERSION/MoltenVK-macos.tar" "$zip"
-    verify_sha1 "$zip" "$MOLTENVK_SHA1"
+    download "https://github.com/KhronosGroup/MoltenVK/releases/download/v$MOLTENVK_VERSION/MoltenVK-macos.tar" "$zip" "$MOLTENVK_SHA256"
     rm -rf "$EMU_MVK_DIR"; mkdir -p "$EMU_MVK_DIR"
     tar -xf "$zip" -C "$EMU_MVK_DIR" --strip-components=5 MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib \
       && tar -xf "$zip" -C "$EMU_MVK_DIR" --strip-components=1 MoltenVK/LICENSE || die "Could not unpack MoltenVK"

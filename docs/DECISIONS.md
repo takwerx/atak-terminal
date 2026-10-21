@@ -2,6 +2,35 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-10-19: every download pinned by SHA-256, redroid by digest, Lima 2.2.1
+
+Supply-chain hardening, no advisory against our versions. Lima, scrcpy and socket_vmnet
+were fetched with no check at all (socket_vmnet is then unpacked into `/` as root), and the
+emulator, system images, platform-tools and MoltenVK only by SHA-1. Now `versions.env`
+carries a SHA-256 for every file, per architecture where the file is (`_ARM64`,
+`_X86_64`), and `download` (Mac) and `Get-Download` (Windows) refuse and delete a file
+that does not match before anything unpacks or runs it; a cached file that no longer
+matches is fetched again. Where each hash came from is noted in `versions.env`:
+
+- **Google publishes only SHA-1** (the repository XML). The SHA-256s are of files fetched
+  2026-10-19 whose SHA-1 matched the XML and the earlier pins, so they are the same bytes
+  as before. The emulator build 15917651 is no longer in `repository2-3.xml`; its SHA-1
+  matched the old pin.
+- **redroid** is pinned as `14.0.0_64only-240527@sha256:0a61...`, the manifest list that
+  `14.0.0_64only-latest` still pointed at, so nothing changes in the image. Podman 4.9.3
+  (the VM's) pulls `name:tag@digest` by the digest alone (`Trying to pull
+  docker.io/redroid/redroid@sha256:...`); the tag is a label for people. An install that
+  already holds the image as `-latest` passes `podman image exists` on the pinned
+  reference, so nobody downloads it again; a wrong digest is refused with "manifest
+  unknown". Measured in a Lima 2.2.1 VM from this template: fresh pull, container up,
+  Android 14 booted.
+- **Ubuntu's image** is pinned by Lima's own template (`_images/ubuntu-24.04`: dated
+  release with a digest). That template falls back to the undated `release/` image without a
+  digest when the dated one cannot be fetched; left as Lima ships it.
+- **Not pinned:** the Market APK (`market_install`, the latest takwerx-market release,
+  ours, chosen by ATAK version at run time) and takwerx's own source (`install.sh`,
+  `takwerx update`, the tag named by `VERSION`). Both are first-party and move by design.
+
 ## 2026-10-09: the emulator wants 1.2 times the data partition free before it makes it
 
 Issue #1, a Windows 11 Home PC (64 GB, 32 cores, RTX 4080 SUPER) on 0.2.1, before the

@@ -172,14 +172,37 @@ update_check() {
   return 0
 }
 
-# download URL DEST: skips when DEST already exists, shows progress on a terminal.
+sha256_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
+# pin_sha256 NAME: the SHA-256 versions.env pins for this Mac's architecture, NAME_SHA256_ARM64
+# or NAME_SHA256_X86_64. Fails when there is none, so nothing pinned is fetched unverified.
+pin_sha256() {
+  local v
+  v="$1_SHA256_$(printf '%s' "$HOST_ARCH" | tr '[:lower:]' '[:upper:]')"
+  [ -n "${!v:-}" ] || die "versions.env has no $v"
+  printf '%s' "${!v}"
+}
+
+# download URL DEST [SHA256]: skips when DEST already exists, shows progress on a terminal.
+# With SHA256, a cached DEST that does not match is fetched again, and a fresh download that
+# does not match is deleted and refused before anything uses it.
 download() {
-  local url=$1 dest=$2
-  if [ -s "$dest" ]; then return 0; fi
+  local url=$1 dest=$2 sha=${3:-} have
+  if [ -s "$dest" ]; then
+    if [ -z "$sha" ] || [ "$(sha256_of "$dest")" = "$sha" ]; then return 0; fi
+    warn "$(basename "$dest") in the cache does not match its pinned SHA-256; downloading it again"
+    rm -f "$dest"
+  fi
   step "Downloading $(basename "$dest")"
   local flags=(-fL --retry 3 --retry-delay 2 -o "$dest.part")
   if have_tty; then flags+=(--progress-bar); else flags+=(-sS); fi
-  curl "${flags[@]}" "$url" || die "Download failed: $url"
+  curl "${flags[@]}" "$url" || { rm -f "$dest.part"; die "Download failed: $url"; }
+  if [ -n "$sha" ]; then
+    have=$(sha256_of "$dest.part")
+    if [ "$have" != "$sha" ]; then
+      rm -f "$dest.part"
+      die "Refused $(basename "$dest"): its SHA-256 is $have, but versions.env pins $sha. The file is deleted and nothing was installed. Run the command again; if this repeats, the download is being altered on the way, so report it"
+    fi
+  fi
   mv "$dest.part" "$dest"
 }
 
