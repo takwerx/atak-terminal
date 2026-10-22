@@ -4,6 +4,25 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## 0.2.10 — 2026-10-22
+
+- **ATAK no longer says it "exited uncleanly" after a restart** (redroid runtime). takwerx
+  ended ATAK abruptly, so a restart, `takwerx down` or a network switch soon after ATAK
+  opened left ATAK asking "Load Plugins?" at every start. takwerx now closes ATAK the way
+  swiping it out of Recents does, so ATAK shuts down cleanly and opens straight to the
+  map. A question already stuck from an older version goes away after the first restart.
+  ATAK's EULA, dismissed hints, file access and files are kept.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
+
 ## 0.2.9 — 2026-10-21
 
 - **Every download is checked before it is used.** Each file takwerx downloads (Lima,
