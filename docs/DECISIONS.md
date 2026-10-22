@@ -2,6 +2,33 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-10-20: "ATAK exited uncleanly" after a redroid restart was takwerx's force-stop
+
+Seen while testing the 0.2.9 candidates, and the same on 0.2.8: after `takwerx restart`,
+a `down`/`up` or a bridged start, ATAK opened on "Load Plugins? ATAK exited uncleanly".
+ATAK's source (5.8, `PluginMapComponent`) says how it decides: `pluginSafeMode` is set to
+true as plugins start loading and set back to false only in the component's `onDestroy`
+or 10 s after the plugins have loaded. The dialog leaves it true until someone answers it.
+`atak_quit` ended ATAK with `am force-stop`, which never runs `onDestroy`. So a stop
+in ATAK's first 15 s or so (it loads its plugins about 6 s after starting, here)
+left the flag set, and from then on every start asked again, because each stop was another
+force-stop with the question still unanswered. Measured on a fresh install: force-stop
+5 s after launch, flag true on disk, the dialog at the next start and at every restart
+after.
+
+`atak_quit` now removes ATAK's task (`am stack remove`), which is what swiping it out of
+Recents does: Android runs onPause, onStop and onDestroy, ATAK logs "destroying
+PluginMapComponent, so setting flag that app exited cleanly", and the process is killed
+("remove task") about half a second later. That is ATAK's own clean shutdown, so whatever
+else it saves on the way out is saved too, which the home key plus force-stop did not do.
+Force-stop stays as the fallback if no task is found or the process is still there after
+10 s. Measured: stops at 1, 2, 4, 6, 8, 10, 12 and 15 s after launch all left the flag
+false; a stuck dialog from the old stop was gone after the first restart on the new
+code; NAT restart, `down`/`up`, bridged start, `down`/`up` and restart, and back to NAT
+all opened ATAK straight to the map with its hints, EULA and files kept. The emulator
+runtime uses the same `atak_quit` before its power-off. Windows' `Stop-Atak` is unchanged
+(no Windows machine to measure on).
+
 ## 2026-10-20: scrcpy 5.0.1, hardware video decoding
 
 scrcpy 5.0 decodes with VideoToolbox on macOS by default (5.0.1 fixes hardware-decoding
