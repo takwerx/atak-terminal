@@ -11,7 +11,24 @@ ADB="$SCRCPY_DIR/adb"; export ADB
 # start one ("cannot start server on remote host"): on a fresh Mac nothing ever listened
 # on 5038 and `takwerx init` waited five minutes for a booted Android it could not see
 # (MacBook, 2026-09-26). Started with the socket variable unset, on the private port.
+#
+# The server reads ADB_USB and ADB_EMU (common.sh) only when it starts, and it outlives
+# takwerx: after `takwerx update` a v0.2.10 server kept scanning USB until the Mac rebooted
+# (Studio, 2026-10-24). So a running server started without them is replaced, once.
+adb_server_pid() { lsof -nP -iTCP:5038 -sTCP:LISTEN -t 2>/dev/null | head -n1; }
 adb_server_ensure() {
+  local pid env i
+  pid=$(adb_server_pid)
+  if [ -n "$pid" ]; then
+    env=" $(ps eww -o command= -p "$pid" 2>/dev/null) "
+    # ps shows the environment of the user's own processes only; never replace on a guess.
+    if [[ $env == *" HOME="* ]] && [[ $env != *" ADB_USB=0 "* || $env != *" ADB_EMU=0 "* ]]; then
+      log "adb: replacing the server on 5038 (pid $pid), started without ADB_USB=0 ADB_EMU=0"
+      with_timeout 10 "$ADB" kill-server >/dev/null 2>&1 || true
+      for i in 1 2 3 4 5 6 7 8 9 10; do [ -n "$(adb_server_pid)" ] || break; sleep 0.5; done
+      if [ -n "$(adb_server_pid)" ]; then kill "$pid" 2>/dev/null || true; sleep 1; fi
+    fi
+  fi
   ( unset ADB_SERVER_SOCKET; ANDROID_ADB_SERVER_PORT=5038 with_timeout 20 "$ADB" start-server >/dev/null 2>&1 ) || true
 }
 adb_()   { "$ADB" -s "$ADB_ENDPOINT" "$@"; }
@@ -35,7 +52,7 @@ android_wait() {
     if [ "$restarted" = 0 ] && printf '%s' "$out" | grep -q 'No route to host'; then
       warn "The running adb server cannot reach the LAN (macOS Local Network permission); restarting it"
       "$ADB" kill-server >/dev/null 2>&1 || true
-      "$ADB" start-server >/dev/null 2>&1 || true
+      adb_server_ensure
       restarted=1
     fi
     sleep 3
