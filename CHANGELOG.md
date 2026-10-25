@@ -4,6 +4,29 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## 0.2.11 — 2026-10-25
+
+- **takwerx leaves your USB phones alone.** takwerx runs its own adb, and it used to look
+  for USB phones too, so it fought with Android Studio or your own `adb` over a phone
+  plugged into the Mac or PC. It now only talks to takwerx's own Android.
+- **A restart in bridged mode no longer loses Android for five minutes** (redroid
+  runtime). takwerx's adb no longer scans for emulators on the Mac either, which is what
+  made it lose track of Android after a restart; it also stops it from claiming other
+  emulators you run on the Mac.
+- **`takwerx update` fixes this right away.** The old adb keeps running after an update,
+  so `takwerx update` (and a restart) now replace it once by itself. No reboot needed;
+  ATAK and its data stay as they are.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
+
 ## 0.2.10 — 2026-10-22
 
 - **ATAK no longer says it "exited uncleanly" after a restart** (redroid runtime). takwerx
