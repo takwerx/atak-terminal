@@ -5,7 +5,30 @@ $script:Adb = Join-Path $Tools 'android-sdk\platform-tools\adb.exe'
 
 function Adb { Invoke-Quiet $script:Adb '-s' $script:Serial @args }
 function AdbSh { Invoke-Quiet $script:Adb '-s' $script:Serial 'shell' @args }
-function Start-AdbServer { [void](Invoke-Quiet $script:Adb 'start-server') }
+# The server reads ADB_USB only when it starts, and it outlives takwerx: one an older takwerx
+# started keeps scanning USB after an update (lib/android.sh). Windows does not show another
+# process's environment, so takwerx notes the process of each server it starts and replaces,
+# once, a server on 5038 that it did not start.
+function Get-AdbServerProcess {
+    $c = Get-NetTCPConnection -LocalPort 5038 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($c) { return [string]$c.OwningProcess }
+    return ''
+}
+function Start-AdbServer {
+    $mark = Join-Path $State 'adb-server'
+    $srv = Get-AdbServerProcess
+    $known = ''
+    if (Test-Path $mark) { $known = ([string](Get-Content $mark -Raw)).Trim() }
+    if ($srv -and $srv -ne $known) {
+        Log "adb: replacing the server on 5038 (process $srv), not started by this takwerx"
+        [void](Invoke-Quiet $script:Adb 'kill-server')
+        for ($i = 0; $i -lt 10 -and (Get-AdbServerProcess); $i++) { Start-Sleep -Milliseconds 500 }
+        if (Get-AdbServerProcess) { Stop-Process -Id ([int]$srv) -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1 }
+    }
+    [void](Invoke-Quiet $script:Adb 'start-server')
+    $srv = Get-AdbServerProcess
+    if ($srv) { Set-Content -Path $mark -Value $srv -Encoding ASCII }
+}
 
 function Test-AndroidOnline { return ((Invoke-Quiet $script:Adb '-s' $script:Serial 'get-state') -eq 'device') }
 function Test-AndroidBooted { return ((AdbSh 'getprop' 'sys.boot_completed') -eq '1') }

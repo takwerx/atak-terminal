@@ -21,6 +21,7 @@ $script:AtakPackage = 'com.atakmap.app.civ'   # ATAK-CIV
 # can never stop the server the ATAK window depends on.
 $env:ANDROID_ADB_SERVER_PORT = '5038'
 # The private server leaves USB phones to any other adb server on the PC (lib/common.sh).
+# Read when the server starts; Start-AdbServer replaces one an older takwerx started.
 $env:ADB_USB = '0'
 
 # versions.env, the one list of pinned versions both engines read.

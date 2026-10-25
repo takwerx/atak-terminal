@@ -610,6 +610,9 @@ emu_up() {
   # After takwerx update the emulator that is already running is the old build; the new
   # copy is made at the next start.
   if emu_running && ! emu_copy_current; then warn "Android is running the previous emulator build; takwerx restart loads the new one"; fi
+  # A server an older takwerx started is replaced here too; a running emulator registers
+  # with the new one within a second.
+  if emu_running; then adb_server_ensure; fi
   emu_start
   if ! android_online || ! android_booted; then
     step "Waiting for Android to boot"
