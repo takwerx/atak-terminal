@@ -18,6 +18,12 @@ CONTAINER_NAME=takwerx-atak
 # client on this machine can never kill the server that the ATAK window depends on.
 export ANDROID_ADB_SERVER_PORT=5038
 export ADB_SERVER_SOCKET=tcp:127.0.0.1:5038
+# And it leaves USB alone. An adb server claims every USB phone it sees, and two servers on
+# one Mac race for each phone plugged in; the loser drops that phone until it is replugged.
+# takwerx's ATAK runs in the VM or the emulator, never on a USB phone, so its server has no
+# use for them, and a developer's own adb server keeps them (MacBook, 2026-10-24: a phone on
+# USB that no adb listed until it was replugged). Read by the server when it starts.
+export ADB_USB=0
 VOLUME_NAME=takwerx-data
 ADB_ENDPOINT=127.0.0.1:5555
 ATAK_PACKAGE=com.atakmap.app.civ   # ATAK-CIV; the mil build is com.atakmap.app

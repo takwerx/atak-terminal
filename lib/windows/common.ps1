@@ -20,6 +20,8 @@ $script:AtakPackage = 'com.atakmap.app.civ'   # ATAK-CIV
 # takwerx's own adb server, on its own port, so Android Studio or any other adb on this PC
 # can never stop the server the ATAK window depends on.
 $env:ANDROID_ADB_SERVER_PORT = '5038'
+# The private server leaves USB phones to any other adb server on the PC (lib/common.sh).
+$env:ADB_USB = '0'
 
 # versions.env, the one list of pinned versions both engines read.
 $script:V = @{}
