@@ -1,0 +1,96 @@
+name: Bug report
+description: "TAKwerx ATAK Terminal is broken or behaving unexpectedly"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The version and computer fields below are required because they
+        decide whether this is an already-fixed bug or a live one; without them the first reply
+        is always "which version, which computer?".
+
+        **This repository is public.** Before you paste a log or attach a screenshot, remove
+        passwords, tokens, keys, callsigns, coordinates, hostnames and IP addresses you do not want published.
+  - type: input
+    id: version
+    attributes:
+      label: "TAKwerx ATAK Terminal version"
+      description: "The number in the `VERSION` file in the takwerx app folder (Mac: `~/.takwerx/app`, Windows: `%LOCALAPPDATA%\\takwerx\\app`)."
+      placeholder: "e.g. 0.2.11"
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: "Your computer"
+      options:
+        - "Mac, Apple silicon (M1 or later)"
+        - "Mac, Intel"
+        - "Windows 11"
+        - "Windows 10"
+        - "Other (say which below)"
+    validations:
+      required: true
+  - type: input
+    id: osver
+    attributes:
+      label: "macOS or Windows version"
+      placeholder: "e.g. macOS 15.4, Windows 11 23H2"
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: "Graphics"
+      description: "Mac: the chip. Windows: the graphics card(s), and `takwerx gpu` setting if you changed it."
+      placeholder: "e.g. Apple M2, NVIDIA RTX 3060"
+    validations:
+      required: false
+  - type: input
+    id: atak
+    attributes:
+      label: "ATAK-CIV version"
+      description: "The ATAK APK you installed."
+      placeholder: "e.g. ATAK-CIV 5.4.0.x"
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: "When it happened"
+      options:
+        - "During the install line"
+        - "Opening the window the first time"
+        - "Running ATAK"
+        - "Installing a plugin or the Market"
+        - "After an update"
+        - "Other"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: "What happened"
+      description: |
+        What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: "Steps to reproduce"
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Logs"
+      description: |
+        Mac: output of `takwerx doctor` and `takwerx status`. Both: `takwerx logs`, and `takwerx logs --container` or `--android` if the window never appeared or ATAK crashed. Paste as text rather than a screenshot where you can.
+      render: shell
+    validations:
+      required: false
