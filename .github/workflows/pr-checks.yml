@@ -3,6 +3,7 @@ name: PR checks
 # Automatic checks on every PR (ops #329, same shape as infra-TAK's PR checks). No Claude involved.
 # A red check blocks the merge once `checks-ok` is made a required check. Run the same things locally:
 #   bash .github/ci/static_checks.sh      (needs shellcheck and PyYAML)
+#   bash .github/ci/release_hygiene.sh    (VERSION, newest tag and newest CHANGELOG section agree; ops #370)
 on:
   pull_request:
     branches: [dev, main]
@@ -46,10 +47,25 @@ jobs:
       - shell: pwsh
         run: ./.github/ci/ps_parse.ps1
 
+  # VERSION must match the newest tag and the newest CHANGELOG section (users receive tags, never main's head).
+  # A -dev version on dev that is ahead of the tag is allowed. Needs the tags, so a full checkout.
+  release-hygiene:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: bash .github/ci/test_release_hygiene.sh
+      - env:
+          BASE_REF: ${{ github.base_ref }}
+        run: bash .github/ci/release_hygiene.sh
+
   # One stable name to require in branch protection. A failed or cancelled job fails it.
   checks-ok:
     if: always()
-    needs: [static, powershell]
+    needs: [static, powershell, release-hygiene]
     runs-on: ubuntu-24.04
     steps:
       - env:
