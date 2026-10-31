@@ -63,6 +63,11 @@ finding and why; do not re-derive those.
   main: `install.sh` and `takwerx update` fetch the tag named by `VERSION` on main, so
   a push to main between releases reaches nobody, and the daily notice fires when
   `VERSION` moves (DECISIONS 2026-09-27).
+  PR checks run `.github/ci/release_hygiene.sh`: `VERSION` must equal the newest tag and the
+  newest `CHANGELOG.md` section (on `dev`, `X.Y.Z-dev` ahead of the tag is fine).
+- External contracts (Google's emulator and images, tak.gov, Lima, scrcpy, MoltenVK, redroid)
+  are in `docs/PLATFORM_REFERENCE.md`. Read it before changing a pin or anything that talks to them,
+  and add what you learn the hard way.
 
 ## Not done
 
