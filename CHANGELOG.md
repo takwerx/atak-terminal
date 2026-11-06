@@ -4,6 +4,21 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## 0.2.12 — not released yet
+
+- **Linux (first version, for Intel and AMD computers).** The same one-line install as the
+  Mac. It runs Google's Android Emulator on your computer's own virtualization (KVM), checks
+  every download before using it, and adds a **TAKwerx ATAK Terminal** entry to your
+  applications menu. On a minimal install it tells you which system libraries to add.
+- **What we have seen working:** on a plain Ubuntu 24.04 cloud machine, Android 15 started,
+  ATAK 5.8 installed and opened to its first screen. **What we have not seen yet:** speed on a
+  real graphics card, and the window on a real desktop. Without a graphics device, Android is
+  drawn by the processor and is slow.
+- **Not supported:** Linux on Arm computers. Google makes no Android emulator for them, and
+  takwerx says so instead of failing halfway.
+- Position on Linux: type coordinates, use the IP address, or turn it off. "Here" works only on
+  desktops that have a location service.
+
 ## 0.2.11 — 2026-10-25
 
 - **takwerx leaves your USB phones alone.** takwerx runs its own adb, and it used to look
