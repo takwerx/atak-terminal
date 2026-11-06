@@ -19,7 +19,7 @@ TAKWERX_VERSION=$(cat "$TAKWERX_APP/VERSION")
 . "$TAKWERX_APP/lib/common.sh"
 case "$HOST_OS" in
   macos) . "$TAKWERX_APP/lib/host-macos.sh" ;;
-  linux) die "Linux hosts are next on the list; macOS is supported today" ;;
+  linux) . "$TAKWERX_APP/lib/host-linux.sh" ;;
 esac
 . "$TAKWERX_APP/lib/vm.sh"
 . "$TAKWERX_APP/lib/android.sh"
@@ -44,10 +44,10 @@ takwerx $TAKWERX_VERSION: ATAK on your desktop
   takwerx datapackage FILE    import a data package zip
   takwerx display PRESET      screen (emulator: fit this Mac's screen) | ultra | tablet | desktop | phone | WIDTHxHEIGHT@DPI
   takwerx fullscreen [on|off] emulator: Android on the whole screen, menu bar and Dock hidden; Ctrl+Cmd+F switches
-  takwerx location WHERE      LAT,LON [ACCURACY_M] | here (this Mac's location) | ip (rough) | off
+  takwerx location WHERE      LAT,LON [ACCURACY_M] | here (this computer's location, if it has one) | ip (rough) | off
   takwerx keyboard MODE       auto | uhid (hardware keyboard, at the Mac) | sdk (typed text, works over remote desktop)
   takwerx network MODE        nat | bridged (bridged gives Android its own LAN address)
-  takwerx runtime [RUNTIME]   redroid (Android in the VM) | emulator (Android Emulator on the Mac's GPU)
+  takwerx runtime [RUNTIME]   redroid (Android in the VM) | emulator (Android Emulator on the GPU; the only one on Linux)
 
   takwerx shell               adb shell into Android
   takwerx vm-shell            shell into the Linux VM
@@ -145,7 +145,9 @@ cmd_init() {
   path_setup
   case "$rt" in
     "") ;;
-    emulator|redroid) config_set RUNTIME "$rt" ;;
+    emulator|redroid)
+      [ "$HOST_OS" = linux ] && [ "$rt" = redroid ] && die "Linux runs the emulator runtime only"
+      config_set RUNTIME "$rt" ;;
     *) die "--runtime must be emulator or redroid" ;;
   esac
   if [ "$(runtime)" = emulator ]; then init_emulator "$apk" "$open"; return; fi
@@ -176,15 +178,15 @@ cmd_init() {
     step "Position for ATAK's self marker"
     if pos=$(ip_location); then
       IFS=, read -r lat lon acc <<<"$pos"; location_set "$lat" "$lon" "$acc" "public IP"
-      say "That is a rough fix. For a real one: takwerx location here (this Mac), or takwerx location LAT,LON"
+      say "That is a rough fix. For a real one: takwerx location here ($HOST_THIS), or takwerx location LAT,LON"
     else
       warn "No position set; run 'takwerx location here' or 'takwerx location LAT,LON' so ATAK has a self marker"
     fi
   fi
   if ! atak_installed; then
-    printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ, then open %s.app: it asks for the file. Or: takwerx apk\n' "$BOLD" "$NC" "$APP_NAME"
+    printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ, then open %s: it asks for the file. Or: takwerx apk\n' "$BOLD" "$NC" "$(app_label)"
   fi
-  printf '\n%sDone.%s %s.app is in %s; new terminals have the takwerx command.\n' "$GREEN" "$NC" "$APP_NAME" "$(dirname "$APP_DIR")"
+  printf '\n%sDone.%s %s is in %s; new terminals have the takwerx command.\n' "$GREEN" "$NC" "$(app_label)" "$(app_home)"
   if [ "$open" = 1 ]; then cmd_up; fi
 }
 
@@ -194,6 +196,7 @@ init_emulator() {
   local apk=$1 open=$2 a restarted=0
   emu_disk_check
   emu_sdk_install
+  if [ "$HOST_OS" = linux ]; then emu_libs_check; fi
   app_build
   # After `takwerx update`: an Android still running the previous emulator build is
   # restarted onto the new one, a clean power-off, and ATAK reopens with its data. Other
@@ -215,9 +218,9 @@ init_emulator() {
   if [ -n "$apk" ]; then atak_install "$apk"; market_install; icons_refresh; first=1; fi
   location_refresh
   if ! atak_installed; then
-    printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ, then open %s.app: it asks for the file. Or: takwerx apk\n' "$BOLD" "$NC" "$APP_NAME"
+    printf '\n%sNo ATAK yet.%s Download ATAK-CIV from https://tak.gov/products/atak-civ, then open %s: it asks for the file. Or: takwerx apk\n' "$BOLD" "$NC" "$(app_label)"
   fi
-  printf '\n%sDone.%s %s.app is in %s; new terminals have the takwerx command.\n' "$GREEN" "$NC" "$APP_NAME" "$(dirname "$APP_DIR")"
+  printf '\n%sDone.%s %s is in %s; new terminals have the takwerx command.\n' "$GREEN" "$NC" "$(app_label)" "$(app_home)"
   if [ "$open" = 1 ] || [ "$restarted" = 1 ]; then cmd_up; if [ "$first" = 1 ]; then market_register_after_first_run; fi; fi
 }
 
@@ -321,6 +324,7 @@ cmd_display() {
 # Full screen for the emulator runtime (emu_fullscreen): Android's size is fixed at start,
 # so a running Android restarts onto the new one, as on Windows.
 cmd_fullscreen() {
+  [ "$HOST_OS" = linux ] && die "Full screen is not built for Linux yet: maximize the emulator window with your desktop's own key (double-click its title bar)"
   [ "$(runtime)" = emulator ] || die "Full screen is for the emulator runtime (takwerx runtime emulator)"
   case "${1:-}" in
     on) config_set EMU_FULLSCREEN on ;;
@@ -347,8 +351,12 @@ cmd_location() {
       return 0 ;;
     off) location_off; return 0 ;;
     here)
-      pos=$(mac_location) || die "Could not get this Mac's location. Allow Location for your terminal (or ATAK) in System Settings > Privacy & Security > Location Services, then try again, or use: takwerx location LAT,LON"
-      IFS=, read -r lat lon acc <<<"$pos"; location_set "$lat" "$lon" "${acc:-50}" "this Mac" ;;
+      if [ "$HOST_OS" = macos ]; then
+        pos=$(mac_location) || die "Could not get this Mac's location. Allow Location for your terminal (or ATAK) in System Settings > Privacy & Security > Location Services, then try again, or use: takwerx location LAT,LON"
+      else
+        pos=$(mac_location) || die "This computer has no location service (GeoClue) that answered. Use: takwerx location LAT,LON, or takwerx location ip"
+      fi
+      IFS=, read -r lat lon acc <<<"$pos"; location_set "$lat" "$lon" "${acc:-50}" "$HOST_THIS" ;;
     ip)
       pos=$(ip_location) || die "Could not look up a position from the public IP"
       IFS=, read -r lat lon acc <<<"$pos"; location_set "$lat" "$lon" "$acc" "public IP" ;;
@@ -430,6 +438,14 @@ cmd_status() {
 cmd_doctor() {
   step "Host"
   host_doctor
+  if [ "$(runtime)" = emulator ]; then
+    step "Android"
+    if emu_installed; then ok "Android Emulator $(tool_version "$EMU_SDK/emulator"), Android $SYSIMG_API image r$(tool_version "$EMU_SYSIMG_DIR")"; else warn "The emulator is not installed (takwerx init)"; fi
+    if emu_running; then ok "emulator running"; else warn "emulator not running (takwerx up)"; fi
+    if android_online; then ok "adb connected"; else warn "adb not connected"; fi
+    if android_online && atak_installed; then ok "ATAK $(atak_version)"; else warn "ATAK not installed (takwerx apk)"; fi
+    return 0
+  fi
   step "VM and Android"
   case "$(vm_status)" in
     Missing) warn "VM not created yet (takwerx init)" ;;
@@ -491,6 +507,7 @@ cmd_runtime() {
   case "${1:-}" in
     "") printf 'Runtime: %s\n' "$(runtime)" ;;
     redroid|emulator)
+      [ "$HOST_OS" = linux ] && [ "$1" = redroid ] && die "Linux runs the emulator runtime only"
       [ "$(runtime)" = "$1" ] && { ok "Runtime is already $1"; return 0; }
       say "Stopping the current runtime first"
       cmd_down

@@ -2,6 +2,44 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-11-06: Linux is the emulator runtime on x86-64 with KVM, and nothing else
+
+Asked for in public issue 17. Decided with the Tools lead (ops #528):
+
+- **Only Google's Android Emulator, run in place.** The same build and Android 15 image as
+  Windows (both x86-64), from the same Google repository, each checked against a SHA-256 in
+  `versions.env` before use. No Lima, redroid or scrcpy on Linux: the Mac needed them for LAN
+  multicast and Intel Macs, and Linux has real KVM and the emulator's own window.
+- **Arm Linux is refused with a reason.** Google's emulator downloads for Linux are
+  x86-64 only (`emulator-linux_x64`; assumed, not re-checked against the repository listing, as
+  the pinned build is no longer in it), so there is nothing to run.
+- **No root.** The one thing a user may have to do is join the `kvm` group; takwerx checks
+  `/dev/kvm` first and says the exact command. System libraries the emulator opens by name
+  (not shown by `ldd`) are checked before the first start, with the Debian and Ubuntu package
+  names.
+- **Graphics:** with a graphics device, the same flags as Windows (host Vulkan under guest
+  ANGLE). With none, or with `EMU_GPU=swiftshader_indirect` in the config, the processor
+  draws (`-gpu swiftshader_indirect`, plain flags); slow but boots. Not measured on a real GPU.
+- **Launcher, not an app bundle:** a `.desktop` entry generated on the user's own computer,
+  with ATAK's icon taken from the APK the user downloaded, else takwerx's. Nothing to sign.
+
+Seen on a throwaway Ubuntu 24.04 cloud machine (4 cores, 15 GB, nested KVM, no GPU, no desktop):
+
+- A stock server image lacks libraries the emulator needs at start (`libX11-xcb`, `libpulse`,
+  `libxkbfile`, `libXi`): it stops with "Could not open libX11-xcb.so.1, give up" even with no
+  window. That is why takwerx checks them first.
+- Android booted in 52 s with swiftshader on 2 cores. ATAK 5.8.0.8 installed over adb and
+  opened to its EULA screen. Android showed "System UI isn't responding" at that point; with
+  processor drawing on two cores that is most likely slowness, not a fault, but it was
+  not investigated.
+- **A bug the test box found:** without a window the emulator process is named
+  `qemu-system-x86_64-headless`, and takwerx looked only for `qemu-system-x86_64`. It decided
+  after 30 s that the emulator "exited" while Android was booting fine, and `up` failed.
+  `emu_pid` now accepts both names; the CI check starts a process with the headless name, and
+  fails without the fix (shown on the box).
+- `takwerx status` prints "emulator on the GPU" on Linux even when the processor is drawing;
+  the wording is the Mac's. Left for a follow-up.
+
 ## 2026-10-20: "ATAK exited uncleanly" after a redroid restart was takwerx's force-stop
 
 Seen while testing the 0.2.9 candidates, and the same on 0.2.8: after `takwerx restart`,

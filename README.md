@@ -95,7 +95,15 @@ reason if the computer falls short.
   redistributed here and cannot be fetched for you; you download it once and takwerx
   installs it.
 
-Linux is next.
+**Linux (work in progress, untested by a person yet)**
+
+- Intel or AMD (x86-64) with KVM (`/dev/kvm`, and your user in the `kvm` group), 8 GB of memory
+  or more, a desktop session, and `curl`, `unzip` and `perl`. Arm Linux is not supported:
+  Google ships no emulator for it.
+- The same install line as the Mac. It runs Google's Android Emulator in place (no VM) and puts
+  a **TAKwerx ATAK Terminal** entry in your applications menu. On a minimal install it tells you
+  which system libraries to add with `apt`.
+- Without a graphics device Android is drawn by the processor and is slow.
 
 Nothing else. No Homebrew, no Docker, no Android Studio, no developer account, and
 on Windows no installer package and nothing from the Microsoft Store.

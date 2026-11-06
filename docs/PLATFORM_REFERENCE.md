@@ -22,6 +22,9 @@ it, and updating the hash together with the version.
 | Android Emulator | 37.1.11, build 15917651 | https://developer.android.com/studio/run/emulator and `dl.google.com/android/repository/emulator-<os>-<build>.zip` | 🔗 2026-10-31 (Mac zip). ✅ boots and runs ATAK, 2026-09-26 on the Studio (DECISIONS "the GPU emulator is a takwerx runtime"). The build is no longer listed in `repository2-3.xml` but the zip still downloads (DECISIONS 2026-10-19) |
 | System image | Android 15, API 35, `google_apis`, r09 | `dl.google.com/android/repository/sys-img/google_apis/` | 🔗 2026-10-31 (arm64 zip). ✅ no fence leak, ATAK at 57 fps, 2026-09-27 on the Mac and the Dell (DECISIONS 2026-09-27 late night). Must be `google_apis`, not `google_apis_playstore`: the GPU runtime needs `adb root` |
 | Platform-tools (Windows adb) | 37.0.1 | `dl.google.com/android/repository/platform-tools_r<ver>-win.zip` | 🔗 2026-10-31 |
+| Android Emulator (Linux zip) | 37.1.11, build 15917651 (`emulator-linux_x64`) | `dl.google.com/android/repository/emulator-linux_x64-15917651.zip` | ✅ verified 2026-11-06 on an Ubuntu 24.04 cloud box: downloaded, hash matched the pin, Android 15 booted (52 s, software drawing). Like the Mac and Windows zips, not in `repository2-3.xml`, so no SHA-1 to match; the SHA-256 is of the file as downloaded |
+| System image (x86-64, Linux and Windows) | Android 15, API 35, `google_apis`, r09 | `dl.google.com/android/repository/sys-img/google_apis/x86_64-35_r09.zip` | ✅ verified 2026-11-06 on the same box (booted, ATAK 5.8.0.8 installed and opened) |
+| Platform-tools (Linux adb) | 37.0.1 | `dl.google.com/android/repository/platform-tools_r37.0.1-linux.zip` | ✅ verified 2026-11-06 on the same box (adb served the emulator and installed the APK); SHA-256 of a file whose SHA-1 matched Google's repository XML |
 | Android SDK licence | accepted once by the user | https://developer.android.com/studio/terms | 🔗 2026-10-31 |
 | MoltenVK | 1.4.2 | https://github.com/KhronosGroup/MoltenVK/releases | 🔗 2026-10-31. ✅ 1.4.2 ran a 10-minute stress clean; the emulator's bundled 1.4.0 cannot build ANGLE's pipelines (DECISIONS 2026-09-26 night) |
 | Lima | 2.2.1 | https://github.com/lima-vm/lima/releases (its `SHA256SUMS` asset) | 🔗 2026-10-31. ✅ VM built from the template and Android 14 booted, 2026-10-19 (DECISIONS 2026-10-19) |
@@ -84,6 +87,16 @@ moves.
   slower redroid runtime and are untested. macOS Local Network privacy will eventually break adb
   to Android's LAN address, so adb always goes to `127.0.0.1:5555` through takwerx's own adb
   server on port 5038 (CLAUDE.md). ✅ recorded in CLAUDE.md.
+- **Linux:** Intel or AMD only; Google ships no Linux emulator for Arm (the only Linux emulator
+  zip in Google's repository is `emulator-linux_x64`; ❓ not re-checked against
+  `repository2-3.xml` because the pinned build is no longer listed). Needs `/dev/kvm` usable
+  by the user (the `kvm` group). ✅ 2026-11-06: refusal on Arm and the KVM message are covered by
+  `.github/ci/test_linux_host.sh`; a real boot happened on an x86-64 Ubuntu 24.04 cloud VM with
+  nested KVM. The emulator needs system libraries a server image lacks (`libX11-xcb`,
+  `libpulse`, `libxkbfile`, `libXi`) ✅ 2026-11-06 (DECISIONS 2026-11-06). Without a window the
+  process is `qemu-system-x86_64-headless` ✅ 2026-11-06. ❓ Not verified: a real GPU (host
+  Vulkan under guest ANGLE), a real desktop window and its launcher entry in a desktop menu,
+  GeoClue position, Wayland.
 - **Windows:** PowerShell 5.1 syntax, ASCII only (it reads a BOM-less file as the ANSI code page).
   Minimum 8 GB and 4 threads, warns below 16 GB (DECISIONS 2026-09-29). ✅ on the Dell.
 - **Lima VM (redroid runtime):** provisioning runs only on a fresh VM (`/etc/takwerx-provisioned`);
