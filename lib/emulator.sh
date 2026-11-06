@@ -10,9 +10,20 @@
 # shown and accepted once, in `takwerx init`.
 
 EMU_SDK="$TAKWERX_TOOLS/android-sdk"
-EMU_SYSIMG_DIR="$EMU_SDK/system-images/android-$SYSIMG_API/$SYSIMG_TAG/arm64-v8a"
+# The system image's ABI, and where Google's emulator for this host comes from. The Mac runs
+# Apple Silicon's arm64 build; Linux (and Windows) the x86-64 one, on KVM (or WHPX).
+if [ "$HOST_OS" = linux ]; then
+  EMU_ABI=x86_64; EMU_CPU_ARCH=x86_64; EMU_ZIP_OS=linux_x64; EMU_QEMU=qemu-system-x86_64
+  EMU_ZIP_SHA=$EMULATOR_LINUX_SHA256; SYSIMG_ZIP_SHA=$SYSIMG_X86_SHA256
+else
+  EMU_ABI=arm64-v8a; EMU_CPU_ARCH=arm64; EMU_ZIP_OS=darwin_aarch64; EMU_QEMU=qemu-system-aarch64
+  EMU_ZIP_SHA=$EMULATOR_SHA256; SYSIMG_ZIP_SHA=$SYSIMG_SHA256
+fi
+EMU_SYSIMG_DIR="$EMU_SDK/system-images/android-$SYSIMG_API/$SYSIMG_TAG/$EMU_ABI"
 EMU_MVK_DIR="$TAKWERX_TOOLS/moltenvk"
-EMU_DIR="$TAKWERX_TOOLS/emulator"
+# The Mac runs a private, patched copy of the emulator (drivers swapped, window retitled,
+# signed again); Linux runs Google's own files in place, nothing patched.
+if [ "$HOST_OS" = linux ]; then EMU_DIR="$EMU_SDK/emulator"; else EMU_DIR="$TAKWERX_TOOLS/emulator"; fi
 EMU_AVD=$(config_get EMU_AVD terminal)
 EMU_AVD_HOME=$(config_get EMU_AVD_HOME "$TAKWERX_ROOT/avd")
 EMU_PORT=$(config_get EMU_PORT 5574)
@@ -61,7 +72,10 @@ runtime() { config_get RUNTIME "$RUNTIME_DEFAULT"; }
 # starts, which common.sh points at takwerx's private server, so it appears there by serial.
 if [ "$(runtime)" = emulator ]; then ADB_ENDPOINT="emulator-$EMU_PORT"; fi
 
-emu_installed() { [ -x "$EMU_SDK/emulator/emulator" ] && [ -f "$EMU_SYSIMG_DIR/system.img" ] && [ -f "$EMU_MVK_LIB" ]; }
+emu_installed() {
+  [ -x "$EMU_SDK/emulator/emulator" ] && [ -f "$EMU_SYSIMG_DIR/system.img" ] || return 1
+  [ "$HOST_OS" = linux ] || [ -f "$EMU_MVK_LIB" ]
+}
 
 # Google's packages come from the same repository the SDK manager reads, under the same
 # licence, which the SDK manager makes you accept and so does this. Once per install.
@@ -96,27 +110,29 @@ emu_sdk_install() {
   local zip tmp
   if [ "$(tool_version "$EMU_SDK/emulator")" != "$EMULATOR_VERSION" ]; then
     emu_license
-    zip="$TAKWERX_CACHE/emulator-darwin_aarch64-$EMULATOR_BUILD.zip"
-    download "https://dl.google.com/android/repository/emulator-darwin_aarch64-$EMULATOR_BUILD.zip" "$zip" "$EMULATOR_SHA256"
+    zip="$TAKWERX_CACHE/emulator-$EMU_ZIP_OS-$EMULATOR_BUILD.zip"
+    download "https://dl.google.com/android/repository/emulator-$EMU_ZIP_OS-$EMULATOR_BUILD.zip" "$zip" "$EMU_ZIP_SHA"
     step "Unpacking the emulator $EMULATOR_VERSION"
     tmp=$(mktemp -d "$TAKWERX_CACHE/unpack.XXXXXX")
     unzip -q -o "$zip" -d "$tmp" || die "Could not unpack $(basename "$zip")"
     rm -rf "$EMU_SDK/emulator"; mkdir -p "$EMU_SDK"; mv "$tmp/emulator" "$EMU_SDK/emulator"; rm -rf "$tmp"
     printf '%s\n' "$EMULATOR_VERSION" >"$EMU_SDK/emulator/.version"
-    rm -rf "$EMU_DIR"  # the private copy is rebuilt from this
+    [ "$HOST_OS" = linux ] || rm -rf "$EMU_DIR"  # the Mac's private copy is rebuilt from this
   fi
   ok "Android Emulator $EMULATOR_VERSION"
   if [ "$(tool_version "$EMU_SYSIMG_DIR")" != "$SYSIMG_REV" ]; then
     emu_license
-    zip="$TAKWERX_CACHE/arm64-v8a-${SYSIMG_API}_r$SYSIMG_REV.zip"
-    download "https://dl.google.com/android/repository/sys-img/$SYSIMG_TAG/arm64-v8a-${SYSIMG_API}_r$SYSIMG_REV.zip" "$zip" "$SYSIMG_SHA256"
+    zip="$TAKWERX_CACHE/$EMU_ABI-${SYSIMG_API}_r$SYSIMG_REV.zip"
+    download "https://dl.google.com/android/repository/sys-img/$SYSIMG_TAG/$EMU_ABI-${SYSIMG_API}_r$SYSIMG_REV.zip" "$zip" "$SYSIMG_ZIP_SHA"
     step "Unpacking Android $SYSIMG_API"
     tmp=$(mktemp -d "$TAKWERX_CACHE/unpack.XXXXXX")
     unzip -q -o "$zip" -d "$tmp" || die "Could not unpack $(basename "$zip")"
-    rm -rf "$EMU_SYSIMG_DIR"; mkdir -p "$(dirname "$EMU_SYSIMG_DIR")"; mv "$tmp/arm64-v8a" "$EMU_SYSIMG_DIR"; rm -rf "$tmp"
+    rm -rf "$EMU_SYSIMG_DIR"; mkdir -p "$(dirname "$EMU_SYSIMG_DIR")"; mv "$tmp/$EMU_ABI" "$EMU_SYSIMG_DIR"; rm -rf "$tmp"
     printf '%s\n' "$SYSIMG_REV" >"$EMU_SYSIMG_DIR/.version"
   fi
   ok "Android $SYSIMG_API system image r$SYSIMG_REV"
+  # MoltenVK translates Vulkan to Metal on a Mac; Linux has its own Vulkan drivers.
+  [ "$HOST_OS" = linux ] && return 0
   if [ "$(tool_version "$EMU_MVK_DIR")" != "$MOLTENVK_VERSION" ]; then
     zip="$TAKWERX_CACHE/MoltenVK-macos-$MOLTENVK_VERSION.tar"
     download "https://github.com/KhronosGroup/MoltenVK/releases/download/v$MOLTENVK_VERSION/MoltenVK-macos.tar" "$zip" "$MOLTENVK_SHA256"
@@ -136,18 +152,23 @@ emu_sdk_install() {
 # The emulator calls an SDK root without a platform-tools directory "broken" and refuses to
 # start. It wants adb there; scrcpy's adb is the one takwerx uses everywhere, so it is that.
 emu_sdk_layout() {
+  [ "$EMU_SDK/platform-tools/adb" = "$ADB" ] && return 0  # Linux: the real platform-tools are there
   mkdir -p "$EMU_SDK/platform-tools"
   [ -e "$EMU_SDK/platform-tools/adb" ] || ln -sfn "$ADB" "$EMU_SDK/platform-tools/adb"
 }
 
 # The trailing tag is emu_prepare's own revision: bump it when the copy is built differently.
-emu_copy_revision() { printf 'emulator %s, moltenvk %s, r13\n' "$EMULATOR_VERSION" "$MOLTENVK_VERSION"; }
+emu_copy_revision() {
+  if [ "$HOST_OS" = linux ]; then printf '%s\n' "$EMULATOR_VERSION"; return 0; fi
+  printf 'emulator %s, moltenvk %s, r13\n' "$EMULATOR_VERSION" "$MOLTENVK_VERSION"
+}
 emu_copy_current()  { [ "$(tool_version "$EMU_DIR")" = "$(emu_copy_revision)" ]; }
 
 emu_prepare() {
   local want
   emu_installed || emu_sdk_install
   emu_sdk_layout
+  [ "$HOST_OS" = linux ] && return 0  # Google's emulator runs as it came; there is no copy to prepare
   case "$EMU_VK" in
     moltenvk) ;;
     kosmickrisp) [ -f "$EMU_KK_LIB" ] || die "KosmicKrisp is missing; it is Homebrew's mesa, for development only" ;;
@@ -301,12 +322,25 @@ emu_bundle_check() {
 # MacBook, which is what macOS gives a full-screen window, and the window helper takes the
 # window full screen once it is up. The size is fixed at start: a start-time choice, and
 # Ctrl+Cmd+F switches within the session, the normal window then scaled down.
-emu_fullscreen() { [ "$(config_get EMU_FULLSCREEN)" = on ]; }
+emu_fullscreen() { [ "$HOST_OS" = linux ] && return 1; [ "$(config_get EMU_FULLSCREEN)" = on ]; }  # not built for Linux
+
+# Linux: the desktop's size from xrandr (or xdpyinfo), less room for a panel and the window's
+# title bar, at 1:1 and 200 dpi like the Mac's non-Retina case. Without a desktop session
+# (a server) the tablet preset.
+emu_geometry_linux() {
+  local g w h
+  g=$(xrandr --current 2>/dev/null | sed -nE 's/.* connected (primary )?([0-9]+)x([0-9]+)\+.*/\2 \3/p' | head -n1)
+  [ -n "$g" ] || g=$(xdpyinfo 2>/dev/null | sed -nE 's/.*dimensions: *([0-9]+)x([0-9]+) pixels.*/\1 \2/p' | head -n1)
+  read -r w h <<<"$g"
+  [[ ${w:-} =~ ^[0-9]+$ && ${h:-} =~ ^[0-9]+$ ]] || { display_geometry tablet; return 0; }
+  printf '%s %s 200' $(( (w - 80) / 2 * 2 )) $(( (h - 100) / 2 * 2 ))
+}
 
 emu_geometry() {
   # Its own key: redroid's DISPLAY_PRESET is a fixed tablet size, the wrong default here.
   local preset; preset=$(config_get EMU_DISPLAY screen)
   if ! emu_fullscreen && [ "$preset" != screen ]; then display_geometry "$preset" && return 0; fi
+  if [ "$HOST_OS" = linux ]; then emu_geometry_linux; return 0; fi
   local g w h k
   if emu_fullscreen; then
     g=$(osascript -l JavaScript -e 'ObjC.import("AppKit"); var s=$.NSScreen.mainScreen, f=s.frame, t=0;
@@ -368,7 +402,7 @@ AvdId=$EMU_AVD
 avd.ini.displayname=TAKwerx ATAK Terminal
 avd.ini.encoding=UTF-8
 PlayStore.enabled=no
-abi.type=arm64-v8a
+abi.type=$EMU_ABI
 disk.dataPartition.size=${EMU_DATA_GB}G
 fastboot.forceColdBoot=yes
 fastboot.forceFastBoot=no
@@ -379,7 +413,7 @@ hw.audioOutput=yes
 hw.battery=yes
 hw.camera.back=none
 hw.camera.front=none
-hw.cpu.arch=arm64
+hw.cpu.arch=$EMU_CPU_ARCH
 hw.cpu.ncore=$cores
 hw.dPad=no
 hw.gps=yes
@@ -403,7 +437,7 @@ hw.sensors.orientation=yes
 hw.sensors.proximity=no
 hw.trackBall=no
 hw.useext4=yes
-image.sysdir.1=system-images/android-$SYSIMG_API/$SYSIMG_TAG/arm64-v8a/
+image.sysdir.1=$(emu_sysdir)
 kernel.newDeviceNaming=autodetect
 kernel.supportsYaffs2=autodetect
 showDeviceFrame=no
@@ -421,7 +455,7 @@ INI
 # the two, and 150 against 200 is what redroid runs at (DECISIONS 2026-09-26). Every existing
 # hw.lcd line goes first; appended duplicates are otherwise read last-wins.
 # The pinned Android image, as the AVD names it.
-emu_sysdir() { printf 'system-images/android-%s/%s/arm64-v8a/' "$SYSIMG_API" "$SYSIMG_TAG"; }
+emu_sysdir() { printf 'system-images/android-%s/%s/%s/' "$SYSIMG_API" "$SYSIMG_TAG" "$EMU_ABI"; }
 emu_image_current() { grep -qx "image.sysdir.1=$(emu_sysdir)" "$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" 2>/dev/null; }
 
 # An existing device moves to the pinned Android image with its data. The emulator keeps
@@ -438,12 +472,12 @@ emu_upgrade_image() {
   build=$(sed -n 's/^ro.build.version.incremental=//p' "$EMU_SYSIMG_DIR/build.prop" 2>/dev/null | head -n1)
   step "Moving Android $old to Android $SYSIMG_API; ATAK and its data stay (the first start takes a little longer)"
   if [ -f "$dir/userdata-qemu.img.qcow2" ] && [ ! -d "$dir.before-android$SYSIMG_API" ]; then
-    cp -cR "$dir" "$dir.before-android$SYSIMG_API" 2>/dev/null || warn "Could not keep a copy of Android $old's data; carrying on without one"
+    { cp -cR "$dir" "$dir.before-android$SYSIMG_API" 2>/dev/null || cp -R "$dir" "$dir.before-android$SYSIMG_API" 2>/dev/null; } || warn "Could not keep a copy of Android $old's data; carrying on without one"
     rm -rf "$dir.before-android$SYSIMG_API/"*.lock 2>/dev/null || true
   fi
   if [ -n "$build" ]; then printf '%s' "$build" >"$dir/version_num.cache"; else warn "No build number in the Android $SYSIMG_API image; the emulator may start with empty data"; fi
-  sed -i '' -e "s#^image.sysdir.1=.*#image.sysdir.1=$(emu_sysdir)#" -e "s#^target=.*#target=android-$SYSIMG_API#" "$ini"
-  sed -i '' -e "s#^target=.*#target=android-$SYSIMG_API#" "$EMU_AVD_HOME/$EMU_AVD.ini" 2>/dev/null || true
+  sed_inplace -e "s#^image.sysdir.1=.*#image.sysdir.1=$(emu_sysdir)#" -e "s#^target=.*#target=android-$SYSIMG_API#" "$ini"
+  sed_inplace -e "s#^target=.*#target=android-$SYSIMG_API#" "$EMU_AVD_HOME/$EMU_AVD.ini" 2>/dev/null || true
   log "AVD $EMU_AVD moved from android-$old to android-$SYSIMG_API (build $build)"
 }
 emu_upgrade_done() {
@@ -465,7 +499,7 @@ emu_configure_avd() {
   log "emulator screen ${w}x${h}, ui dpi $dpi, ${ram} MiB, ${cores} cores"
 }
 
-emu_pid()     { pgrep -f "qemu-system-aarch64 -avd $EMU_AVD " | head -n1; }
+emu_pid()     { pgrep -f "$EMU_QEMU -avd $EMU_AVD " | head -n1; }
 emu_running() { [ -n "$(emu_pid)" ]; }
 
 # Guest ANGLE on Vulkan on a Metal driver: the only path found where ATAK both runs on the
@@ -478,17 +512,22 @@ emu_running() { [ -n "$(emu_pid)" ]; }
 # Wi-Fi network; only netsim's device-to-device simulation is lost, which nothing here uses.
 # No -grpc: it listens on every interface with no authentication.
 emu_start() {
-  [ -x "$ADB" ] || die "adb is missing (scrcpy is not installed). Run: takwerx init"
+  [ -x "$ADB" ] || die "adb is missing. Run: takwerx init"
   emu_running && return 0
   emu_prepare
-  emu_bundle_check
-  cmp -s "$EMU_WINDOW_LIB" "$EMU_DIR/lib64/libtakwerx-window.dylib" \
-    || cp -f "$EMU_WINDOW_LIB" "$EMU_DIR/lib64/libtakwerx-window.dylib" 2>/dev/null || true
+  if [ "$HOST_OS" = macos ]; then
+    emu_bundle_check
+    cmp -s "$EMU_WINDOW_LIB" "$EMU_DIR/lib64/libtakwerx-window.dylib" \
+      || cp -f "$EMU_WINDOW_LIB" "$EMU_DIR/lib64/libtakwerx-window.dylib" 2>/dev/null || true
+  else
+    kvm_check
+  fi
   mkdir -p "$EMU_AVD_HOME"
   emu_data_disk_check
   emu_avd_create
   rm -f "$EMU_AVD_HOME/$EMU_AVD.avd/"*.lock
   emu_configure_avd
+  if [ "$HOST_OS" = linux ]; then emu_start_linux; return 0; fi
   step "Starting Android on the GPU ($EMU_AVD, $(emu_geometry | awk '{print $1"x"$2" at "$3" dpi"}'))"
   log "emulator start: $(tool_version "$EMU_DIR")${EMU_FEATURES:+, features $EMU_FEATURES}${EMU_ARGS:+, args $EMU_ARGS}"
   # shellcheck disable=SC2086  # EMU_ARGS is a list of arguments
@@ -496,6 +535,34 @@ emu_start() {
     TAKWERX_FULLSCREEN="$(emu_fullscreen && echo 1 || echo 0)" TAKWERX_WINDOW_LOG="$TAKWERX_LOGS/emulator-window.log" \
     nohup "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu host \
       -feature "Vulkan,GuestAngle,VirtioTablet,-WiFiPacketStream${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim $EMU_ARGS \
+      >>"$EMU_LOG" 2>&1 </dev/null &
+  disown 2>/dev/null || true
+}
+
+# Linux. The same flags as Windows (the other x86-64 host): the host's own Vulkan driver under
+# guest ANGLE, VirtioTablet for a real mouse, no netsim Wi-Fi. With no graphics device (a
+# server, a VM without a GPU) or on request (EMU_GPU=swiftshader_indirect in the config) the
+# processor draws instead, and only the plain flags are used; that is slow but boots. No
+# desktop session (DISPLAY empty) means no window, which is how it is tested in the cloud.
+emu_gpu_mode() {
+  local g; g=$(config_get EMU_GPU "")
+  if [ -z "$g" ]; then
+    if [ -e /dev/dri/renderD128 ] || [ -e /dev/nvidia0 ]; then g=host; else g=swiftshader_indirect; fi
+  fi
+  printf '%s' "$g"
+}
+emu_start_linux() {
+  local gpu feats=VirtioTablet,-WiFiPacketStream win=()
+  gpu=$(emu_gpu_mode)
+  [ "$gpu" = host ] && feats=Vulkan,GuestAngle,$feats
+  [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || win=(-no-window)
+  [ "$gpu" = host ] || warn "No graphics device was found, so the processor draws Android; it will be slow. $( [ -z "$(config_get EMU_GPU "")" ] || echo "(EMU_GPU=$gpu in the config)")"
+  step "Starting Android ($EMU_AVD, $(emu_geometry | awk '{print $1"x"$2" at "$3" dpi"}'), graphics: $gpu${win:+, no window})"
+  log "emulator start: $(tool_version "$EMU_DIR"), gpu $gpu, features $feats${EMU_FEATURES:+,$EMU_FEATURES}${EMU_ARGS:+, args $EMU_ARGS}"
+  # shellcheck disable=SC2086  # EMU_ARGS is a list of arguments
+  ANDROID_SDK_ROOT="$EMU_SDK" ANDROID_HOME="$EMU_SDK" ANDROID_AVD_HOME="$EMU_AVD_HOME" \
+    nohup "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu "$gpu" "${win[@]}" \
+      -feature "$feats${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim -accel on $EMU_ARGS \
       >>"$EMU_LOG" 2>&1 </dev/null &
   disown 2>/dev/null || true
 }
@@ -554,7 +621,9 @@ emu_provision() {
   # fails and ATAK aborts in its line shader. Without the warm-up ATAK runs; the placeholder
   # pipelines still fail later, and nothing visible is missing (2026-09-26). The property is
   # the one ANGLE reads; the boot property the emulator passes through for it is not.
-  if "$ADB" -s "$ADB_ENDPOINT" root >/dev/null 2>&1; then
+  # (Mac only: it is MoltenVK's Metal that rejects the pipelines. Windows and Linux skip it.)
+  if [ "$HOST_OS" != macos ]; then :
+  elif "$ADB" -s "$ADB_ENDPOINT" root >/dev/null 2>&1; then
     with_timeout 30 "$ADB" -s "$ADB_ENDPOINT" wait-for-device >/dev/null 2>&1 || true
     adb_sh setprop debug.angle.feature_overrides_disabled warmUpPipelineCacheAtLink >/dev/null 2>&1 \
       || warn "Could not set ANGLE's override; ATAK may not start on MoltenVK"
@@ -682,6 +751,16 @@ emu_watchdog() {
 # something one looks at; it does not go dark. caffeinate ends with the emulator.
 emu_awake() {
   local pid; pid=$(emu_pid); [ -n "$pid" ] || return 0
+  if [ "$HOST_OS" = linux ]; then
+    # systemd's inhibitor lock, held for as long as the emulator runs; without systemd the
+    # desktop's own screen saver settings apply.
+    command -v systemd-inhibit >/dev/null 2>&1 || return 0
+    pgrep -f "takwerx-awake $pid" >/dev/null 2>&1 && return 0
+    nohup systemd-inhibit --what=idle:sleep --who=takwerx --why="ATAK is open" \
+      bash -c 'exec -a "takwerx-awake $1" tail --pid="$1" -f /dev/null' _ "$pid" >/dev/null 2>&1 </dev/null &
+    disown 2>/dev/null || true
+    return 0
+  fi
   pgrep -f "caffeinate -d -i -w $pid" >/dev/null 2>&1 && return 0
   nohup caffeinate -d -i -w "$pid" >/dev/null 2>&1 </dev/null &
   disown 2>/dev/null || true
@@ -761,6 +840,14 @@ emu_focus_fix() {
 
 # The emulator draws its own window; opening ATAK means bringing it forward.
 emu_front() {
-  local pid; pid=$(emu_pid); [ -n "$pid" ] || return 0
+  local pid wid; pid=$(emu_pid); [ -n "$pid" ] || return 0
+  if [ "$HOST_OS" = linux ]; then
+    # Only with a tool that can raise a window; otherwise the window opens in front by itself.
+    if command -v xdotool >/dev/null 2>&1; then
+      wid=$(xdotool search --pid "$pid" 2>/dev/null | tail -n1)
+      [ -n "$wid" ] && xdotool windowactivate "$wid" >/dev/null 2>&1 || true
+    fi
+    return 0
+  fi
   osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $pid) to true" >/dev/null 2>&1 || true
 }

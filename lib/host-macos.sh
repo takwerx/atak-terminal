@@ -11,6 +11,10 @@ LIMA_SUDOERS=/private/etc/sudoers.d/lima
 APP_NAME="TAKwerx ATAK Terminal"
 if [ -w /Applications ]; then APP_DIR="/Applications/$APP_NAME.app"; else APP_DIR="$HOME/Applications/$APP_NAME.app"; fi
 
+# How messages name the app and where it is (the Linux host has its own).
+app_label() { printf '%s.app' "$APP_NAME"; }
+app_home()  { dirname "$APP_DIR"; }
+
 host_check() {
   local ver major
   ver=$(sw_vers -productVersion); major=${ver%%.*}

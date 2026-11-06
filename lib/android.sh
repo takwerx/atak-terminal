@@ -6,7 +6,7 @@
 with_timeout() { perl -e 'alarm shift; exec @ARGV' "$@"; }
 
 # Always the adb that ships with scrcpy, talking to takwerx's private server (see common.sh).
-ADB="$SCRCPY_DIR/adb"; export ADB
+ADB="${ADB_BIN:-$SCRCPY_DIR/adb}"; export ADB
 # With ADB_SERVER_SOCKET set (common.sh), adb treats the server as remote and refuses to
 # start one ("cannot start server on remote host"): on a fresh Mac nothing ever listened
 # on 5038 and `takwerx init` waited five minutes for a booted Android it could not see
@@ -15,7 +15,10 @@ ADB="$SCRCPY_DIR/adb"; export ADB
 # The server reads ADB_USB and ADB_EMU (common.sh) only when it starts, and it outlives
 # takwerx: after `takwerx update` a v0.2.10 server kept scanning USB until the Mac rebooted
 # (Studio, 2026-10-24). So a running server started without them is replaced, once.
-adb_server_pid() { lsof -nP -iTCP:5038 -sTCP:LISTEN -t 2>/dev/null | head -n1; }
+adb_server_pid() {
+  if command -v lsof >/dev/null 2>&1; then lsof -nP -iTCP:5038 -sTCP:LISTEN -t 2>/dev/null | head -n1
+  else ss -ltnpH 'sport = :5038' 2>/dev/null | sed -nE 's/.*pid=([0-9]+).*/\1/p' | head -n1; fi
+}
 adb_server_ensure() {
   local pid env i
   pid=$(adb_server_pid)
@@ -327,7 +330,17 @@ atak_splash_apply() {
   [ -f "$src" ] || return 0
   [ "$w" -gt 0 ] && [ "$h" -gt 0 ] || return 0
   out="$TAKWERX_STATE/atak_splash-${w}x${h}.png"
-  if [ ! -f "$out" ] || [ "$src" -nt "$out" ]; then
+  if [ "$HOST_OS" = linux ]; then
+    # No sips here: ImageMagick fits the picture if the computer has it; without it Android
+    # keeps ATAK's own splash screen, which is only a different picture.
+    if [ ! -f "$out" ] || [ "$src" -nt "$out" ]; then
+      local im=""
+      if command -v magick >/dev/null 2>&1; then im="magick"; elif command -v convert >/dev/null 2>&1; then im="convert"; fi
+      [ -n "$im" ] || { log "splash: ImageMagick is not installed; keeping ATAK's own splash"; return 0; }
+      $im "$src" -resize "${w}x${h}" -background black -gravity center -extent "${w}x${h}" "$out" >/dev/null 2>&1 \
+        || { log "splash: could not fit the picture"; rm -f "$out"; return 0; }
+    fi
+  elif [ ! -f "$out" ] || [ "$src" -nt "$out" ]; then
     aw=$(sips -g pixelWidth "$src" 2>/dev/null | awk '/pixelWidth/{print $2}')
     ah=$(sips -g pixelHeight "$src" 2>/dev/null | awk '/pixelHeight/{print $2}')
     [ -n "$aw" ] && [ -n "$ah" ] || { warn "Could not read the splash image"; return 0; }
@@ -480,11 +493,11 @@ location_refresh() {
   pos=$(mac_location) || return 0
   IFS=, read -r lat lon acc <<<"$pos"
   [[ $lat =~ ^-?[0-9]+(\.[0-9]+)?$ && $lon =~ ^-?[0-9]+(\.[0-9]+)?$ ]] || return 0
-  location_set "$lat" "$lon" "${acc:-50}" "this Mac"
+  location_set "$lat" "$lon" "${acc:-50}" "$HOST_THIS"
 }
 
 location_off() {
-  vm_run "rm -f $LOCATION_FILE" >/dev/null 2>&1 || true
+  [ "$(runtime)" = emulator ] || vm_run "rm -f $LOCATION_FILE" >/dev/null 2>&1 || true
   config_unset LOCATION; config_unset LOCATION_ACCURACY; config_unset LOCATION_SOURCE
   ok "Position feed off; ATAK reports no GPS again shortly"
 }

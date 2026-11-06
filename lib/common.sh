@@ -54,7 +54,10 @@ esac
 # The runtime a fresh install gets: the Android Emulator on the GPU on Apple Silicon (fast,
 # full-size icons, no VM, no admin password); redroid in the VM elsewhere, until the
 # emulator path is built for those hosts. `takwerx runtime` switches.
-if [ "$HOST_OS" = macos ] && [ "$HOST_ARCH" = arm64 ]; then RUNTIME_DEFAULT=emulator; else RUNTIME_DEFAULT=redroid; fi
+# On Linux there is only the emulator (Intel and AMD, with KVM).
+if { [ "$HOST_OS" = macos ] && [ "$HOST_ARCH" = arm64 ]; } || [ "$HOST_OS" = linux ]; then RUNTIME_DEFAULT=emulator; else RUNTIME_DEFAULT=redroid; fi
+# How messages name the computer.
+if [ "$HOST_OS" = macos ]; then HOST_THIS="this Mac"; else HOST_THIS="this computer"; fi
 
 if [ -t 1 ]; then
   BOLD=$'\033[1m'; RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[0;33m'; DIM=$'\033[2m'; NC=$'\033[0m'
@@ -186,7 +189,11 @@ update_check() {
   return 0
 }
 
-sha256_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
+sha256_of() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1"; else sha256sum "$1"; fi | cut -d' ' -f1; }
+# sed -i with no backup file: BSD sed (a Mac) wants an empty argument after -i, GNU sed (Linux) none.
+sed_inplace() { if [ "$HOST_OS" = macos ]; then sed -i '' "$@"; else sed -i "$@"; fi; }
+# Modification time in seconds: BSD stat on a Mac, GNU stat on Linux.
+file_mtime() { if [ "$HOST_OS" = macos ]; then stat -f %m "$1"; else stat -c %Y "$1"; fi 2>/dev/null || echo 0; }
 # pin_sha256 NAME: the SHA-256 versions.env pins for this Mac's architecture, NAME_SHA256_ARM64
 # or NAME_SHA256_X86_64. Fails when there is none, so nothing pinned is fetched unverified.
 pin_sha256() {
@@ -264,7 +271,7 @@ find_atak_apk() {
   for f in "$TAKWERX_APP"/../*.apk "$TAKWERX_APP"/*.apk "$HOME"/Downloads/*.apk; do
     [ -f "$f" ] || continue
     v=$(apk_version_from_name "$f"); [ -n "$v" ] || continue
-    printf '%s\t%s\t%s\n' "$v" "$(stat -f %m "$f" 2>/dev/null || echo 0)" "$f"
+    printf '%s\t%s\t%s\n' "$v" "$(file_mtime "$f")" "$f"
   done | sort -t "$(printf '\t')" -k1,1V -k2,2n | tail -n1 | cut -f3- || true
 }
 # ATAK-5.8.0.4-174b425-civ-release.apk, ATAK-CIV-5.8.0.4-...apk, the civ "small" build:
