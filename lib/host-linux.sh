@@ -49,6 +49,45 @@ kvm_check() {
   fi
 }
 
+# The libraries Google's emulator needs from the system, which a desktop Ubuntu has and a
+# minimal or server install may not (measured 2026-11-06 on a stock Ubuntu 24.04 server
+# image: the emulator stopped with "Could not open libX11-xcb.so.1, give up", before any
+# window, even for a run without one). Two kinds: what the binary links to (ldd shows a gap)
+# and what it opens by name at start (ldconfig shows a gap). Prints the missing ones as
+# "soname package", the package being the Debian/Ubuntu name where known.
+emu_libs_missing() {
+  local e="$EMU_SDK/emulator" lib have
+  have=$(ldconfig -p 2>/dev/null || true)
+  {
+    LD_LIBRARY_PATH="$e/lib64:$e/lib64/qt/lib:$e/lib64/gles_swiftshader" ldd "$e/qemu/linux-x86_64/qemu-system-x86_64" 2>/dev/null \
+      | sed -nE 's/^[[:space:]]*(lib[^ ]+) => not found.*/\1/p'
+    for lib in libX11.so.6 libX11-xcb.so.1 libxcb.so.1 libGL.so.1; do
+      [[ $have == *"$lib "* ]] || printf '%s\n' "$lib"
+    done
+  } | sort -u | while read -r lib; do
+    case "$lib" in
+      libpulse.so.0) echo "$lib libpulse0" ;;
+      libXi.so.6) echo "$lib libxi6" ;;
+      libxkbfile.so.1) echo "$lib libxkbfile1" ;;
+      libX11.so.6) echo "$lib libx11-6" ;;
+      libX11-xcb.so.1) echo "$lib libx11-xcb1" ;;
+      libxcb.so.1) echo "$lib libxcb1" ;;
+      libGL.so.1) echo "$lib libgl1" ;;
+      *) echo "$lib -" ;;
+    esac
+  done
+}
+emu_libs_check() {
+  local missing pkgs
+  missing=$(emu_libs_missing)
+  [ -n "$missing" ] || { ok "System libraries for the emulator"; return 0; }
+  pkgs=$(printf '%s\n' "$missing" | awk '$2 != "-" {print $2}' | tr '\n' ' ')
+  if command -v apt-get >/dev/null 2>&1 && [ -n "$pkgs" ]; then
+    die "The emulator needs system libraries this computer does not have ($(printf '%s' "$missing" | awk '{print $1}' | tr '\n' ' ')). Install them once, then run this again: sudo apt install ${pkgs}"
+  fi
+  die "The emulator needs system libraries this computer does not have: $(printf '%s' "$missing" | awk '{print $1}' | tr '\n' ' '). Install the packages that provide them with your package manager, then run this again"
+}
+
 # Google's platform-tools (adb) at the pinned version, verified before they are unpacked.
 host_tools_install() {
   local zip tmp
@@ -166,6 +205,10 @@ host_doctor() {
   else warn "/dev/kvm is missing: turn on virtualization in the BIOS, or allow nested virtualization in the VM"; fi
   if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then ok "Desktop session ($([ -n "${WAYLAND_DISPLAY:-}" ] && echo Wayland || echo X11))"; else warn "No desktop session (DISPLAY is empty); the emulator will run without a window"; fi
   if [ -e /dev/dri/renderD128 ] || [ -e /dev/nvidia0 ]; then ok "A graphics device is present"; else warn "No graphics device (/dev/dri): Android is drawn by the processor, which is slow"; fi
+  if [ -x "$EMU_SDK/emulator/emulator" ]; then
+    c=$(emu_libs_missing | awk '{print $1}' | tr '\n' ' ')
+    if [ -z "$c" ]; then ok "System libraries for the emulator"; else warn "Missing system libraries: $c(takwerx init says what to install)"; fi
+  fi
   if [ -x "$ADB_BIN" ]; then ok "adb $(tool_version "$PLATFORM_TOOLS_DIR")"; else warn "adb not installed (takwerx init)"; fi
   if [ -f "$APP_DIR" ]; then ok "$APP_DIR"; else warn "Launcher not created yet (takwerx init)"; fi
 }

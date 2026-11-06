@@ -553,6 +553,7 @@ emu_gpu_mode() {
 }
 emu_start_linux() {
   local gpu feats=VirtioTablet,-WiFiPacketStream win=()
+  emu_libs_check
   gpu=$(emu_gpu_mode)
   [ "$gpu" = host ] && feats=Vulkan,GuestAngle,$feats
   [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || win=(-no-window)

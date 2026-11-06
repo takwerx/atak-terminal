@@ -196,6 +196,7 @@ init_emulator() {
   local apk=$1 open=$2 a restarted=0
   emu_disk_check
   emu_sdk_install
+  if [ "$HOST_OS" = linux ]; then emu_libs_check; fi
   app_build
   # After `takwerx update`: an Android still running the previous emulator build is
   # restarted onto the new one, a clean power-off, and ATAK reopens with its data. Other
