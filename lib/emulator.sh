@@ -499,7 +499,9 @@ emu_configure_avd() {
   log "emulator screen ${w}x${h}, ui dpi $dpi, ${ram} MiB, ${cores} cores"
 }
 
-emu_pid()     { pgrep -f "$EMU_QEMU -avd $EMU_AVD " | head -n1; }
+# Linux runs the emulator without a window as "<qemu>-headless" (found on a cloud box, where
+# takwerx gave up on a healthy boot after 30 s because it only looked for the plain name).
+emu_pid()     { pgrep -f "${EMU_QEMU}(-headless)? -avd $EMU_AVD " | head -n1; }
 emu_running() { [ -n "$(emu_pid)" ]; }
 
 # Guest ANGLE on Vulkan on a Metal driver: the only path found where ATAK both runs on the

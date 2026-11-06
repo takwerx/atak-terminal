@@ -56,6 +56,18 @@ t_abi() { ( load; [ "$EMU_ABI" = x86_64 ] && [ "$EMU_QEMU" = qemu-system-x86_64 
   && [ "$(emu_sysdir)" = "system-images/android-$SYSIMG_API/$SYSIMG_TAG/x86_64/" ] ); }
 check "x86-64 image, Google's emulator used in place" t_abi
 
+# A windowless Linux emulator is called qemu-system-x86_64-headless; takwerx must still see it
+# (otherwise `up` fails after 30 s while Android boots fine).
+t_headless_pid() {
+  ( load
+    bash -c 'exec -a "$0 -avd $1 -port 5554" sleep 30' "${EMU_QEMU}-headless" "$EMU_AVD" & p=$!
+    trap 'kill "$p" 2>/dev/null' EXIT
+    sleep 1
+    emu_running
+  )
+}
+check "a windowless (-headless) emulator process is found" t_headless_pid
+
 t_adb() { ( load; [ "$ADB" = "$TAKWERX_TOOLS/android-sdk/platform-tools/adb" ] ); }
 check "adb comes from the SDK's platform-tools" t_adb
 
