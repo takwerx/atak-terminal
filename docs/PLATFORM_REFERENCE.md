@@ -64,6 +64,12 @@ moves.
   `emulator/lib/emu-original-feature-flags.protobuf` in the pinned build; no driver update lifts
   it. ✅ 2026-09-29 (DECISIONS 2026-09-29 first Windows PC). takwerx keeps a copy of the list in
   `lib/windows/emulator.ps1` to refresh when the pin moves.
+- **NVIDIA driver floor on Windows:** the emulator's `hasSufficientHwGpu` check exits at once
+  with `GPU driver is not supported to run avd ... Minimum driver version required: 553.35.0` for
+  an NVIDIA driver older than that (seen: NVS 510, 475.14, Vulkan 1.2.175). Windows shows the
+  driver as `30.0.14.7514`; NVIDIA's number is its last five digits (`475.14`). ✅ the refusal
+  text, 2026-11-09 from a user's `emulator.log` (atak-terminal #19). ❓ Not verified on a real
+  PC: that `ANDROID_EMU_VK_SELECT_GPU=Intel` makes the check judge the Intel chip instead.
 - **Hypervisor:** `emulator -accel-check`; on Windows 11 with virtualization-based security,
   Windows' own hypervisor is enough, no WHPX switch needed. ✅ 2026-09-27 on the Dell (DECISIONS 2026-09-27 afternoon).
 - **Image upgrade keeps data** only if `version_num.cache` is written with the new build number

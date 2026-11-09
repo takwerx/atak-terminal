@@ -1394,3 +1394,16 @@ Ubuntu 24.04 (kernel 6.8.0-134-generic) and redroid 14. Each one is now handled 
   on the VM's loopback only and Lima forwards only that port to 127.0.0.1 on the host.
   Bridged mode with ipvlan or macvlan will expose adbd on the LAN and needs a fix
   (iptables inside Android or `ro.adb.secure=1` with a vendored key) before it ships.
+
+## 2026-11-09: an old NVIDIA card beside an Intel chip (atak-terminal #19)
+
+A Windows 11 PC with an NVIDIA NVS 510 (driver 475.14, the last for Kepler cards) and an
+Intel UHD 630 passed every install check, then the emulator exited in about a second: its own
+`hasSufficientHwGpu` check wants an NVIDIA driver of 553.35 or newer, and by default it judges
+the discrete chip. takwerx only waited, then said "Android did not come up". Now `Start-Emu`
+reads each chip's driver (`lib/windows/gpu.ps1`) and, when an NVIDIA driver is below 553.35 and
+an Intel or AMD chip is there, sets `ANDROID_EMU_VK_SELECT_GPU` to it (an `EMU_GPU` the user set
+wins). If the emulator still refuses, `Invoke-EmuUp` quotes the refusal and names `takwerx gpu`.
+Not done: a software-drawing fallback (`swiftshader_indirect`); the DECISIONS above measured
+CPU drawing as far too slow for ATAK. Assumed, not seen on a real PC: that the check follows
+the selected chip.

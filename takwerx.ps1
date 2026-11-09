@@ -12,6 +12,7 @@ $argv = @($args | Where-Object { $_ -ne '--from-app' })
 . (Join-Path $App 'lib\windows\common.ps1')
 . (Join-Path $App 'lib\windows\host.ps1')
 . (Join-Path $App 'lib\windows\android.ps1')
+. (Join-Path $App 'lib\windows\gpu.ps1')
 . (Join-Path $App 'lib\windows\emulator.ps1')
 
 function Show-Usage {

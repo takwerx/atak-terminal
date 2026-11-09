@@ -5,6 +5,7 @@ name: PR checks
 #   bash .github/ci/static_checks.sh      (needs shellcheck and PyYAML)
 #   bash .github/ci/release_hygiene.sh    (VERSION, newest tag and newest CHANGELOG section agree; ops #370)
 #   bash .github/ci/test_linux_host.sh    (the Linux host's pure-shell parts; runs on any Linux x86-64; ops #528)
+#   pwsh -File .github/ci/test_windows_gpu.ps1   (the Windows GPU choice; ops #590)
 on:
   pull_request:
     branches: [dev, main]
@@ -47,6 +48,9 @@ jobs:
           persist-credentials: false
       - shell: pwsh
         run: ./.github/ci/ps_parse.ps1
+      # The GPU choice's pure functions, on the PC from atak-terminal #19 (ops #590).
+      - shell: pwsh
+        run: ./.github/ci/test_windows_gpu.ps1
 
   # The Linux host: pins present, engine starts, GNU-userland helpers, launcher entry (ops #528).
   # Needs no KVM and downloads nothing.

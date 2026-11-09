@@ -50,13 +50,13 @@ $script:SoftwareGpus = @(
     '8086:a001', '8086:a002', '8086:a011', '8086:a012',
     '1002:6779', '1002:6840', '1002:68f9', '10de:0a65', '10de:0dfc', '1414:008c')
 
-# The PC's graphics as @(name, "vendor:device"); remote and virtual displays have no PCI id.
+# The PC's graphics as @(name, "vendor:device", driver version); remote and virtual displays have no PCI id.
 function Get-HostGpus {
     $out = @()
     foreach ($g in @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue)) {
         $id = ''
         if ("$($g.PNPDeviceID)" -match 'VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})') { $id = ('{0}:{1}' -f $Matches[1], $Matches[2]).ToLowerInvariant() }
-        $out += , @("$($g.Name)", $id)
+        $out += , @("$($g.Name)", $id, "$($g.DriverVersion)")
     }
     return $out
 }
@@ -91,15 +91,18 @@ function Test-EmuHost {
     Ok ("Disk: {0:N0} GB free on {1}" -f $free, $drive.Root)
 }
 
+# The emulator's log as text, read while the emulator still holds it open.
+function Read-EmuLog {
+    try {
+        $fs = [System.IO.File]::Open($EmuLog, 'Open', 'Read', 'ReadWrite')
+        try { return (New-Object System.IO.StreamReader $fs).ReadToEnd() } finally { $fs.Dispose() }
+    } catch { return '' }
+}
 # The emulator's own word, from its log: it chose software drawing anyway (a chip Google
 # added after this list, or one of two graphics it picked). Not when asked for on purpose.
 function Test-EmuSoftwareGpu {
     if ("$EmuFeatures $EmuArgs" -match '(?i)swiftshader') { return $false }
-    try {
-        $fs = [System.IO.File]::Open($EmuLog, 'Open', 'Read', 'ReadWrite')
-        try { $text = (New-Object System.IO.StreamReader $fs).ReadToEnd() } finally { $fs.Dispose() }
-    } catch { return $false }
-    return ($text -match "'ForceSwiftshader' is set")
+    return ((Read-EmuLog) -match "'ForceSwiftshader' is set")
 }
 
 # ---- Google's packages -------------------------------------------------------------------------
@@ -353,7 +356,12 @@ function Start-Emu {
     $g = Get-EmuGeometry
     Step ("Starting Android on the GPU ({0}, {1}x{2} at {3} dpi)" -f $Avd, $g[0], $g[1], $g[2])
     $env:ANDROID_SDK_ROOT = $Sdk; $env:ANDROID_HOME = $Sdk; $env:ANDROID_AVD_HOME = $AvdHome
-    if ($EmuGpu) { $env:ANDROID_EMU_VK_SELECT_GPU = $EmuGpu } else { Remove-Item Env:ANDROID_EMU_VK_SELECT_GPU -ErrorAction SilentlyContinue }
+    $gpu = $EmuGpu
+    if (-not $gpu) {
+        $gpu = Get-GpuSteer (Get-HostGpus) $SoftwareGpus
+        if ($gpu) { Warn "The NVIDIA driver on this PC is too old for the Android Emulator (it needs 553.35 or newer), so Android draws on the $gpu graphics" }
+    }
+    if ($gpu) { $env:ANDROID_EMU_VK_SELECT_GPU = $gpu } else { Remove-Item Env:ANDROID_EMU_VK_SELECT_GPU -ErrorAction SilentlyContinue }
     $features = 'Vulkan,GuestAngle,VirtioTablet,-WiFiPacketStream'
     if ($EmuFeatures) { $features += ",$EmuFeatures" }
     $argv = @('-avd', $Avd, '-port', "$EmuPort", '-gpu', 'host', '-feature', $features, '-no-snapshot', '-no-boot-anim')
@@ -455,6 +463,8 @@ function Invoke-EmuUp {
         if (-not (Wait-Emu 300)) {
             $keep = Join-Path $AvdHome "$Avd.avd.before-android$($V.SYSIMG_API)"
             $extra = if (Test-Path $keep) { ". The device from before the move to Android $($V.SYSIMG_API) is kept at $keep" } else { '' }
+            $refusal = Get-GpuRefusal (Read-EmuLog)
+            if ($refusal) { Die ("The Android Emulator refused this PC's graphics driver: {0}. Update the graphics driver from the maker's site, or, on a PC with a second graphics chip, run 'takwerx gpu Intel' (or AMD), then 'takwerx restart'. See {1}" -f $refusal, $EmuLog) }
             Die "Android did not come up (the emulator exited or took over 5 minutes). See $EmuLog$extra"
         }
     }
