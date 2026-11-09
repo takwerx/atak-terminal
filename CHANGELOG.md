@@ -6,6 +6,11 @@ icon mentions a new release within a day of it, and so do `takwerx up` and
 
 ## 0.2.12 — not released yet
 
+- **Windows: a PC with an old NVIDIA card and Intel graphics now starts.** Google's emulator
+  quits at once if the NVIDIA driver is older than 553.35 (cards such as the NVS 510 stop at
+  475 and cannot be updated). takwerx now draws Android on the Intel (or AMD) graphics in that
+  case. If the emulator still refuses the driver, takwerx says so and what to do, instead of
+  "Android did not come up". Not yet seen on a real PC: reported from one, fixed from its log.
 - **Linux (first version, for Intel and AMD computers).** The same one-line install as the
   Mac. It runs Google's Android Emulator on your computer's own virtualization (KVM), checks
   every download before using it, and adds a **TAKwerx ATAK Terminal** entry to your
