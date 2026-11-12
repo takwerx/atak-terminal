@@ -6,12 +6,23 @@
 # PCs are told within a day and fetch this tag with `takwerx update`, which restarts
 # Android onto it by itself (0.2.1 on); the install line fetches it from now on. If
 # VERSION already says 0.1.2 and is committed, only the tag and release are made.
+# Before this, ./tools/release-smoke.sh 0.1.2 must have passed for this commit (ops #693):
+# a release that cannot install or update reaches every user within a day. No way around it.
 set -euo pipefail
 cd "$(dirname "$0")"
 v=${1:-}
 die() { printf 'release: %s\n' "$*" >&2; exit 1; }
 [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "usage: ./release.sh X.Y.Z"
 [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || die "release from main"
+# The install-and-update smoke must have passed for exactly this tree: the commit it ran on is
+# HEAD, or only VERSION and CHANGELOG.md changed since. reports/ is where it leaves its note.
+pass_file="${TAKWERX_SMOKE_DIR:-reports}/smoke-$v.pass"
+[ -f "$pass_file" ] || die "no smoke pass for $v. Run ./tools/release-smoke.sh $v first (it must pass)"
+[ "$(sed -n 's/^version //p' "$pass_file")" = "$v" ] || die "$pass_file is not for $v"
+smoked=$(sed -n 's/^commit //p' "$pass_file")
+git cat-file -e "$smoked^{commit}" 2>/dev/null || die "the smoke ran on a commit this clone does not have ($smoked); run it again"
+changed=$(git diff --name-only "$smoked" HEAD | grep -vE '^(CHANGELOG\.md|VERSION)$' || true)
+[ -z "$changed" ] || die "the smoke passed on ${smoked:0:9}, but these files changed since; run ./tools/release-smoke.sh $v again:"$'\n'"$changed"
 command -v gh >/dev/null || die "the GitHub CLI (gh) is needed"
 gh auth status >/dev/null 2>&1 || die "gh is not logged in"
 dirty=$(git status --porcelain | grep -vE ' (CHANGELOG\.md|VERSION)$' || true)

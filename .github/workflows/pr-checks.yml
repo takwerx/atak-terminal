@@ -6,6 +6,7 @@ name: PR checks
 #   bash .github/ci/release_hygiene.sh    (VERSION, newest tag and newest CHANGELOG section agree; ops #370)
 #   bash .github/ci/test_linux_host.sh    (the Linux host's pure-shell parts; runs on any Linux x86-64; ops #528)
 #   pwsh -File .github/ci/test_windows_gpu.ps1   (the Windows GPU choice; ops #590)
+#   bash .github/ci/test_release_gate.sh  (release.sh refuses to run without a passed install-and-update smoke; ops #693)
 on:
   pull_request:
     branches: [dev, main]
@@ -78,10 +79,24 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: bash .github/ci/release_hygiene.sh
 
+  # release.sh must refuse to run unless tools/release-smoke.sh passed for this exact tree (ops #693).
+  # The smoke itself needs a Mac and downloads the pinned tools, so the release worker runs it
+  # before every release; here the gate is tested, and the smoke's quick mode runs without downloads.
+  release-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: bash .github/ci/test_release_gate.sh
+      - run: bash tools/release-smoke.sh 99.0.0 --quick
+
   # One stable name to require in branch protection. A failed or cancelled job fails it.
   checks-ok:
     if: always()
-    needs: [static, powershell, linux-host, release-hygiene]
+    needs: [static, powershell, linux-host, release-hygiene, release-gate]
     runs-on: ubuntu-24.04
     steps:
       - env:
