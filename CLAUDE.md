@@ -63,6 +63,10 @@ finding and why; do not re-derive those.
   main: `install.sh` and `takwerx update` fetch the tag named by `VERSION` on main, so
   a push to main between releases reaches nobody, and the daily notice fires when
   `VERSION` moves (DECISIONS 2026-09-27).
+  Before `release.sh`, run `./tools/release-smoke.sh X.Y.Z` (ops #693): in a scratch home it
+  installs the candidate fresh and updates the previous release to it, and leaves
+  `reports/smoke-X.Y.Z.pass`. `release.sh` refuses to run without that file for this tree.
+  The smoke does not start ATAK or touch a Windows PC; the T&E covers those.
   PR checks run `.github/ci/release_hygiene.sh`: `VERSION` must equal the newest tag and the
   newest `CHANGELOG.md` section (on `dev`, `X.Y.Z-dev` ahead of the tag is fine).
 - External contracts (Google's emulator and images, tak.gov, Lima, scrcpy, MoltenVK, redroid)
