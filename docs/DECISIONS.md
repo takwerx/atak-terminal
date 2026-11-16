@@ -86,6 +86,23 @@ So about four times less CPU here, not the ten upstream quotes: redroid encodes 
 software and gives about 16 fps when the map moves, so there is less to decode. Nothing in
 the engine's scrcpy flags changed; `--keyboard=uhid` opens and holds the session as on 4.1.
 
+## 2026-11-16: Lima 2.3.0 (two public advisories, neither reached takwerx)
+
+Lima 2.3.0 (2026-11-06) fixes GHSA-566x-598w-h7w7 (medium: QEMU loads option ROMs from the
+folder `limactl` was started in, so a guest could read host files) and GHSA-4wvf-9pjc-cpfp
+(low: `limactl shell --sync` can apply guest changes to the host that the user did not
+review). takwerx was not exposed to either: `lima/takwerx.yaml.tmpl` sets `vmType: vz` (not
+QEMU) and `mounts: []`, and no script calls `limactl shell --sync`. It moves anyway, so the
+VM tool has no known advisory, and `.github/ci/test_lima_pin.sh` keeps it from going back:
+version at least 2.3.0, pins equal to the release's own SHA256SUMS, and the template still
+`vz`, no mounts, no `--sync`. 2.3.0 also verifies the guest's SSH host key ("Pinning the SSH
+host key of the guest" in the log). Measured on an M-series Mac in a scratch home: a VM
+created by 2.2.1 started under 2.3.0 with no prompt and Android came up; a fresh install
+on 2.3.0 did the same; ATAK 5.8.0.5 ran in both and `takwerx shell` and `limactl shell`
+commands worked. `limactl` with no arguments now opens a menu on a terminal; takwerx always
+passes a subcommand. The default Ubuntu template in Lima moved to 26.10; ours still names
+`_images/ubuntu-24.04`, which 2.3.0 still ships.
+
 ## 2026-10-19: every download pinned by SHA-256, redroid by digest, Lima 2.2.1
 
 Supply-chain hardening, no advisory against our versions. Lima, scrcpy and socket_vmnet
