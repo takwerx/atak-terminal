@@ -7,6 +7,7 @@ name: PR checks
 #   bash .github/ci/test_linux_host.sh    (the Linux host's pure-shell parts; runs on any Linux x86-64; ops #528)
 #   pwsh -File .github/ci/test_windows_gpu.ps1   (the Windows GPU choice; ops #590)
 #   bash .github/ci/test_release_gate.sh  (release.sh refuses to run without a passed install-and-update smoke; ops #693)
+#   bash .github/ci/test_lima_pin.sh      (Lima is 2.3.0 or newer and its pins match the release; ops #825)
 on:
   pull_request:
     branches: [dev, main]
@@ -93,10 +94,20 @@ jobs:
       - run: bash .github/ci/test_release_gate.sh
       - run: bash tools/release-smoke.sh 99.0.0 --quick
 
+  # Lima (the VM tool takwerx installs) must stay at 2.3.0 or newer, with the SHA-256 pins the Lima release publishes (ops #825).
+  lima-pin:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - run: bash .github/ci/test_lima_pin.sh
+
   # One stable name to require in branch protection. A failed or cancelled job fails it.
   checks-ok:
     if: always()
-    needs: [static, powershell, linux-host, release-hygiene, release-gate]
+    needs: [static, powershell, linux-host, release-hygiene, release-gate, lima-pin]
     runs-on: ubuntu-24.04
     steps:
       - env:
