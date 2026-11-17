@@ -42,6 +42,7 @@ takwerx $TAKWERX_VERSION: ATAK on your desktop
   takwerx market              install the TAKWERX Market plugin matching your ATAK
   takwerx app                 rebuild the app icon in Applications (name, icon, launcher)
   takwerx datapackage FILE    import a data package zip
+  takwerx enroll LINK|PICTURE enrol ATAK from a tak:// link or a TAK Portal QR picture
   takwerx display PRESET      screen (emulator: fit this Mac's screen) | ultra | tablet | desktop | phone | WIDTHxHEIGHT@DPI
   takwerx fullscreen [on|off] emulator: Android on the whole screen, menu bar and Dock hidden; Ctrl+Cmd+F switches
   takwerx location WHERE      LAT,LON [ACCURACY_M] | here (this computer's location, if it has one) | ip (rough) | off
@@ -310,6 +311,7 @@ cmd_market()      { android_up; market_install; }
 cmd_app()         { app_build; }
 # After ATAK lands, the app (and so the running emulator, which is the same app) takes its art.
 icons_refresh()   { app_build; }
+cmd_enroll() { [ -n "${1:-}" ] || die "Usage: takwerx enroll 'tak://...' or takwerx enroll QR.png"; android_up; enroll "$1"; }
 cmd_datapackage() { [ -n "${1:-}" ] || die "Usage: takwerx datapackage FILE.zip"; android_up; datapackage_install "$1"; }
 cmd_display() {
   [ -n "${1:-}" ] || die "Usage: takwerx display screen|ultra|tablet|desktop|phone|WxH@DPI"
@@ -552,6 +554,7 @@ main() {
     market)      cmd_market ;;
     app)         cmd_app ;;
     datapackage) cmd_datapackage "$@" ;;
+    enroll)      cmd_enroll "$@" ;;
     display)     cmd_display "$@" ;;
     location)    cmd_location "$@" ;;
     keyboard)    cmd_keyboard "$@" ;;

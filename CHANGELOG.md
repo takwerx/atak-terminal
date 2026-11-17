@@ -4,13 +4,33 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
-## 0.2.13 — not yet released
+## 0.2.14 — not yet released
 
 - **Mac, redroid runtime: `takwerx init --runtime redroid` no longer stops with "Android did not
   come up".** On an Apple-silicon Mac, `init` looked for the emulator's Android while the new
   VM's Android was already running, waited five minutes and gave up a moment before the next
   command found Android at once. It now looks in the right place from the start, so a fresh
   install carries on to ATAK without you running `takwerx apk` by hand.
+
+## 0.2.13 — 2026-11-17
+
+- **Enroll ATAK from a TAK Portal QR code by dragging it onto the window** (Mac). ATAK
+  Terminal has no camera, so ATAK cannot scan a QR code. Save the QR code as a picture,
+  drag it onto the ATAK screen, and ATAK starts enrollment within a few seconds, the same
+  as after a scan on a phone. Pictures without a TAK enrollment code are left alone.
+- **`takwerx enroll`** does the same from Terminal: give it the `tak://` link from the
+  portal or the QR picture. Chrome inside ATAK Terminal does not open a `tak://` link
+  that you type or paste in its address bar; this is the way around that.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac or Linux** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
 
 ## 0.2.12 — 2026-11-17
 

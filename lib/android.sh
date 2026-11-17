@@ -418,6 +418,36 @@ datapackage_install() {
   ok "Pushed to Download/$name; if ATAK did not import it, use Import Manager > Local SD"
 }
 
+# Enrolling from a TAK Portal QR code. The window has no camera, so ATAK cannot scan one;
+# the Mac reads the picture instead and hands ATAK the tak:// link inside it, as tapping
+# "Open" after a scan does (the same BROWSABLE VIEW intent portal's "Open in app" fires,
+# DECISIONS 2026-09-26). Chrome will not open a tak:// link typed in its address bar.
+qr_decode() {
+  [ "$HOST_OS" = macos ] || die "Reading a QR picture needs macOS; give the tak:// link itself"
+  osascript -l JavaScript "$TAKWERX_APP/lib/qr-decode.js" "$1" 2>/dev/null
+}
+
+# A single quote would end the quoting on Android's shell; no tak:// link carries one.
+tak_link_open() {
+  local url=$1
+  case $url in tak://*) ;; *) die "Not a tak:// link: $url" ;; esac
+  case $url in *"'"*) die "The link has a quote in it; not sending it" ;; esac
+  adb_sh "am start -a android.intent.action.VIEW -d '$url' -p $ATAK_PACKAGE" >/dev/null 2>&1 \
+    || die "Android did not take the link"
+}
+
+enroll() {
+  local arg=$1 url
+  if [ -f "$arg" ]; then
+    url=$(qr_decode "$arg" | grep -m1 '^tak://' || true)
+    [ -n "$url" ] || die "No tak:// QR code found in $arg"
+  else
+    url=$arg
+  fi
+  tak_link_open "$url"
+  ok "Sent to ATAK: ${url%%\?*}"
+}
+
 display_apply() {
   local preset=$1 w='' h='' dpi=''
   read -r w h dpi <<<"$(display_geometry "$preset" || true)"
