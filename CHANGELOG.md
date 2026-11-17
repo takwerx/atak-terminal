@@ -4,6 +4,16 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## 0.2.13 — not released yet
+
+- **Enroll ATAK from a TAK Portal QR code by dragging it onto the window** (Mac). ATAK
+  Terminal has no camera, so ATAK cannot scan a QR code. Save the QR code as a picture,
+  drag it onto the ATAK screen, and ATAK starts enrollment within a few seconds, the same
+  as after a scan on a phone. Pictures without a TAK enrollment code are left alone.
+- **`takwerx enroll`** does the same from Terminal: give it the `tak://` link from the
+  portal or the QR picture. Chrome inside ATAK Terminal does not open a `tak://` link
+  that you type or paste in its address bar; this is the way around that.
+
 ## 0.2.12 — 2026-11-17
 
 - **Updates the VM tool Lima to 2.3.0, which fixes two security issues.** Mac installs that

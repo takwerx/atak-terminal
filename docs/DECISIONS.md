@@ -2,6 +2,27 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-11-17: TAK Portal QR enrollment by dropping the picture on the window
+
+At a mutual aid event a tester had only the portal's QR code. ATAK's scanner needs a camera and
+the AVD has none (`hw.camera.back=none`). Chrome treats a `tak://` URL typed or pasted in its
+address bar as a search: Android Chrome hands an unknown scheme to an app only from a link
+on a page, which is why portal's "Open in app" works and the same URL typed does not.
+
+- **The emulator already copies any dropped file that is not an APK into `/sdcard/Download`.**
+  `emu_dropwatch` polls that folder every 2 s, pulls each new picture, reads it on the Mac
+  with Core Image's QR detector through `osascript -l JavaScript` (`lib/qr-decode.js`: no
+  compiler, no download, 0.5 s on the MacBook), and fires the `tak://` link as a VIEW intent
+  at ATAK, as "Open" after a scan does. The picture is then deleted. Pictures without a
+  `tak://` code, and pictures already there when the watcher starts, are left alone.
+- **New means name plus ctime.** A dropped file keeps its own modified date (a 06:49 picture
+  dropped at 08:00 shows 06:49), and a second drop of the same picture replaces the first
+  under the same name. Keyed on the name alone, the second drop was missed on the MacBook;
+  the ctime moves on every replace while the mtime does not (measured).
+- **Not done:** Windows (no built-in QR reader in Windows PowerShell 5.1 without a
+  download) and the redroid runtime (scrcpy also pushes drops to `/sdcard/Download`, so the
+  same watcher would fit). Nothing tells the user that a picture held no `tak://` code.
+
 ## 2026-11-06: Linux is the emulator runtime on x86-64 with KVM, and nothing else
 
 Asked for in public issue 17. Decided with the Tools lead (ops #528):

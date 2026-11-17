@@ -696,6 +696,7 @@ emu_up() {
   emu_provision
   emu_location_apply
   emu_watchdog
+  emu_dropwatch
 }
 
 # Until the presentation stall has a cause (DECISIONS 2026-09-26): when Android reports
@@ -744,6 +745,50 @@ emu_watchdog() {
           break
         done
       done' _ "$ADB" "$ADB_ENDPOINT" "$ATAK_PACKAGE" "$LOG_FILE" "$pid"
+  ) >/dev/null 2>&1 </dev/null &
+  disown 2>/dev/null || true
+}
+
+# A TAK Portal QR picture dragged onto the window enrols ATAK. The emulator copies a dropped
+# file (other than an APK) into /sdcard/Download; this sees each new picture there, reads it
+# on the Mac (lib/qr-decode.js, 0.5 s), and when it holds a tak:// link sends that to ATAK
+# and deletes the picture. Pictures with no tak:// code are left alone. Pictures already
+# there at start are never read. A dropped file keeps its own modified date, so new means a
+# name and change time (ctime) not seen before: a second drop of the same picture replaces
+# the first under the same name, and only its ctime moves (2026-11-17, the MacBook: the
+# name alone missed it). Polls every 2 s; ends with the emulator. Mac only.
+emu_dropwatch() {
+  local pid; pid=$(emu_pid); [ -n "$pid" ] || return 0
+  [ "$HOST_OS" = macos ] || return 0
+  pgrep -f "takwerx-dropwatch $pid" >/dev/null 2>&1 && return 0
+  (
+    exec -a "takwerx-dropwatch $pid" bash -c '
+      A=$1; D=$2; PKG=$3; LOGF=$4; QPID=$5; JS=$6
+      # One line per picture: "ctime|path".
+      list() { "$A" -s "$D" shell "for f in /sdcard/Download/*; do case \"\$f\" in *.[pP][nN][gG]|*.[jJ][pP][gG]|*.[jJ][pP][eE][gG]|*.[hH][eE][iI][cC]) [ -f \"\$f\" ] && stat -c \"%Z|%n\" \"\$f\";; esac; done" 2>/dev/null | tr -d "\r"; }
+      seen=$(list)
+      tmp=$(mktemp -d) || exit 0
+      trap "rm -rf \"$tmp\"" EXIT
+      while kill -0 "$QPID" 2>/dev/null; do
+        sleep 2
+        while IFS= read -r k; do
+          [ -n "$k" ] || continue
+          printf "%s\n" "$seen" | grep -Fxq -- "$k" && continue
+          seen=$(printf "%s\n%s" "$seen" "$k")
+          f=${k#*|}
+          sleep 1   # the emulator may still be writing it
+          rm -f "$tmp/pic"
+          "$A" -s "$D" pull "$f" "$tmp/pic" >/dev/null 2>&1 || continue
+          url=$(osascript -l JavaScript "$JS" "$tmp/pic" 2>/dev/null | grep -m1 "^tak://")
+          [ -n "$url" ] || continue
+          case $url in *"'"'"'"*) continue ;; esac
+          "$A" -s "$D" shell "am start -a android.intent.action.VIEW -d '"'"'$url'"'"' -p $PKG" >/dev/null 2>&1
+          "$A" -s "$D" shell "rm -f '"'"'$f'"'"'" >/dev/null 2>&1
+          printf "%s dropwatch: %s held %s; sent to ATAK\n" "$(date "+%F %T")" "${f##*/}" "${url%%\?*}" >>"$LOGF"
+        done <<EOF
+$(list)
+EOF
+      done' _ "$ADB" "$ADB_ENDPOINT" "$ATAK_PACKAGE" "$LOG_FILE" "$pid" "$TAKWERX_APP/lib/qr-decode.js"
   ) >/dev/null 2>&1 </dev/null &
   disown 2>/dev/null || true
 }
