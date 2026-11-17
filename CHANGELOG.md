@@ -6,6 +6,8 @@ icon mentions a new release within a day of it, and so do `takwerx up` and
 
 ## 0.2.12 — not released yet
 
+- **Updates the VM tool Lima to 2.3.0, which fixes two security issues.** Mac installs that
+  use the VM runtime fetch it on their next start. Your saved settings and your VM stay as they are.
 - **Windows: a PC with an old NVIDIA card and Intel graphics now starts.** Google's emulator
   quits at once if the NVIDIA driver is older than 553.35 (cards such as the NVS 510 stop at
   475 and cannot be updated). takwerx now draws Android on the Intel (or AMD) graphics in that
