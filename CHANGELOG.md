@@ -4,6 +4,14 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## 0.2.13 — not yet released
+
+- **Mac, redroid runtime: `takwerx init --runtime redroid` no longer stops with "Android did not
+  come up".** On an Apple-silicon Mac, `init` looked for the emulator's Android while the new
+  VM's Android was already running, waited five minutes and gave up a moment before the next
+  command found Android at once. It now looks in the right place from the start, so a fresh
+  install carries on to ATAK without you running `takwerx apk` by hand.
+
 ## 0.2.12 — 2026-11-17
 
 - **Updates the VM tool Lima to 2.3.0, which fixes two security issues.** Mac installs that

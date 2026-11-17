@@ -70,7 +70,14 @@ runtime() { config_get RUNTIME "$RUNTIME_DEFAULT"; }
 
 # The emulator registers with the adb server named by ANDROID_ADB_SERVER_PORT when it
 # starts, which common.sh points at takwerx's private server, so it appears there by serial.
-if [ "$(runtime)" = emulator ]; then ADB_ENDPOINT="emulator-$EMU_PORT"; fi
+# redroid is reached over Lima's loopback forward. Call this again after the runtime changes
+# inside one run: `takwerx init --runtime redroid` on an Apple-silicon Mac loaded this file
+# with the emulator default and kept looking for emulator-5574 while Android booted in the
+# VM, so init stopped after its wait with "Android did not come up" (ops #861).
+adb_endpoint_set() {
+  if [ "$(runtime)" = emulator ]; then ADB_ENDPOINT="emulator-$EMU_PORT"; else ADB_ENDPOINT=127.0.0.1:5555; fi
+}
+adb_endpoint_set
 
 emu_installed() {
   [ -x "$EMU_SDK/emulator/emulator" ] && [ -f "$EMU_SYSIMG_DIR/system.img" ] || return 1
