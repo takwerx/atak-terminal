@@ -147,7 +147,8 @@ cmd_init() {
     "") ;;
     emulator|redroid)
       [ "$HOST_OS" = linux ] && [ "$rt" = redroid ] && die "Linux runs the emulator runtime only"
-      config_set RUNTIME "$rt" ;;
+      config_set RUNTIME "$rt"
+      adb_endpoint_set ;;
     *) die "--runtime must be emulator or redroid" ;;
   esac
   if [ "$(runtime)" = emulator ]; then init_emulator "$apk" "$open"; return; fi
