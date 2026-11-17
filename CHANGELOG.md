@@ -4,7 +4,7 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
-## 0.2.12 — not released yet
+## 0.2.12 — 2026-11-17
 
 - **Updates the VM tool Lima to 2.3.0, which fixes two security issues.** Mac installs that
   use the VM runtime fetch it on their next start. Your saved settings and your VM stay as they are.
@@ -25,6 +25,16 @@ icon mentions a new release within a day of it, and so do `takwerx up` and
   takwerx says so instead of failing halfway.
 - Position on Linux: type coordinates, use the IP address, or turn it off. "Here" works only on
   desktops that have a location service.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac or Linux** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
 
 ## 0.2.11 — 2026-10-25
 
