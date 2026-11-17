@@ -45,8 +45,12 @@ export HOME="$WORK/home" TAKWERX_ROOT="$WORK/home/.takwerx" ADB_BIN="$WORK/adb"
 mkdir -p "$HOME/Downloads"
 
 # Load the libraries the way ./takwerx does, then the real cmd_init with the VM steps stubbed.
+# uname is stubbed to say "Apple-silicon Mac" so this runs the same on a Linux CI runner: init
+# refuses --runtime redroid on Linux before it reaches the endpoint code, and the bug is the
+# Apple-silicon path (host-macos.sh only defines functions when sourced, so it loads anywhere).
 load() {
   set -euo pipefail
+  uname() { case "${1:-}" in -s) echo Darwin ;; -m) echo arm64 ;; *) command uname "$@" ;; esac; }
   TAKWERX_APP=$REPO; TAKWERX_VERSION=$(cat "$REPO/VERSION")
   # shellcheck source=/dev/null
   . "$REPO/lib/common.sh"
