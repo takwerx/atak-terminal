@@ -2,6 +2,31 @@
 
 Dated notes on what was decided and why, so nobody re-derives them. Newest first.
 
+## 2026-11-17, later: Command+V types the Mac clipboard; the emulator's clipboard sharing is not used
+
+The emulator's own clipboard sharing (`set.clipboardSharing = 1`) worked on the Studio every
+time and failed on the MacBook (worked remotely over Screen Sharing): a Mac copy reached
+Android once, later copies did not, and after one restart the emulator never touched the
+Mac pasteboard again (none of its `NSPasteboard ... data requested` lines in the unified
+log). Chrome pasted what had arrived; in ATAK, right-click > Paste and Control+V often did
+nothing, and ATAK never even asked ClipboardService. Not explained; not chased further.
+
+- **Command+V in the window now types the text instead** (`helpers/emuwindow`). The helper
+  reads the Mac pasteboard and sends it to the emulator console on `127.0.0.1:EMU_PORT`
+  (auth token `~/.emulator_console_auth_token`; `TAKWERX_CONSOLE_PORT` from `emu_start`) as
+  `event text`. Typing does not depend on either app's clipboard handling.
+- **`event text` limits, measured on the Studio:** a batch over about 30 key events (a
+  capital is 4, a small letter 2) is dropped whole; batches sent back to back lose parts.
+  6 characters per command, 60 ms apart, typed a 107-character `tak://` link exactly in
+  about 1 s. A leading space in a command is dropped, a trailing one kept; a backslash must
+  be doubled. Spaces that start a line go as `event send EV_KEY:KEY_SPACE`.
+- **Key events arrive from an untitled inner Qt window**, not the main window
+  (`Cmd+V in window ""` on the MacBook). A check for the main window ignored every Command+V;
+  only Extended Controls is left alone now.
+- **Clicking into a text field never focuses it** (Tab works), in ATAK's server dialog, Go To
+  and MGRS boxes. The pointer is `QEMU Virtio Tablet` (BTN_MOUSE, BTN_TOUCH, BTN_DIGI), so
+  Android may take the click for a stylus tap. Belongs to Cursorwerx, not looked at here.
+
 ## 2026-11-17: TAK Portal QR enrollment by dropping the picture on the window
 
 At a mutual aid event a tester had only the portal's QR code. ATAK's scanner needs a camera and

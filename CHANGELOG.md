@@ -4,13 +4,29 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
-## 0.2.14 — not yet released
+## 0.2.14 — 2026-11-17
 
+- **Command+V pastes Mac text into Android** (Mac). Copy a text on the Mac, click into a
+  field in ATAK or Chrome, and press Command+V: the text is typed in, within about a second
+  for a long enrollment link. Before, the Mac clipboard reached Android once and then often
+  not again, and in ATAK paste often did nothing. Text only; very unusual characters
+  (emoji, accented letters) may not come through. A copied text that ends in a new line
+  does not press Enter by itself.
 - **Mac, redroid runtime: `takwerx init --runtime redroid` no longer stops with "Android did not
   come up".** On an Apple-silicon Mac, `init` looked for the emulator's Android while the new
   VM's Android was already running, waited five minutes and gave up a moment before the next
   command found Android at once. It now looks in the right place from the start, so a fresh
   install carries on to ATAK without you running `takwerx apk` by hand.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac or Linux** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
 
 ## 0.2.13 — 2026-11-17
 

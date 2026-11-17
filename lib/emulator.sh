@@ -541,7 +541,7 @@ emu_start() {
   log "emulator start: $(tool_version "$EMU_DIR")${EMU_FEATURES:+, features $EMU_FEATURES}${EMU_ARGS:+, args $EMU_ARGS}"
   # shellcheck disable=SC2086  # EMU_ARGS is a list of arguments
   ANDROID_SDK_ROOT="$EMU_SDK" ANDROID_HOME="$EMU_SDK" ANDROID_AVD_HOME="$EMU_AVD_HOME" ANDROID_EMU_VK_SELECT_ICD="$EMU_VK" \
-    TAKWERX_FULLSCREEN="$(emu_fullscreen && echo 1 || echo 0)" TAKWERX_WINDOW_LOG="$TAKWERX_LOGS/emulator-window.log" \
+    TAKWERX_FULLSCREEN="$(emu_fullscreen && echo 1 || echo 0)" TAKWERX_WINDOW_LOG="$TAKWERX_LOGS/emulator-window.log" TAKWERX_CONSOLE_PORT="$EMU_PORT" \
     nohup "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu host \
       -feature "Vulkan,GuestAngle,VirtioTablet,-WiFiPacketStream${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim $EMU_ARGS \
       >>"$EMU_LOG" 2>&1 </dev/null &

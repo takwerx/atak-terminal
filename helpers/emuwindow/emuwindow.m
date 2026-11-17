@@ -12,6 +12,10 @@
 #import <AppKit/AppKit.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 static NSString *logPath;
 static BOOL wantFull;
@@ -165,9 +169,107 @@ static void showTools(void) {
     [detached removeAllObjects];
 }
 
+// Cmd+V types the Mac's clipboard text into Android. The emulator's own clipboard sharing
+// is unreliable here: on the MacBook a Mac copy reached Android once and then not again,
+// while Chrome pasted what had come; in ATAK nothing pasted at all (2026-11-17). Typing
+// needs neither. The text goes to the emulator's console (localhost, its auth token file)
+// as `event text`, which turns characters into key presses. Measured on the Studio: a batch
+// of more than about 30 key events (a capital is 4, a small letter 2) is dropped whole, and
+// batches sent back to back drop parts, so 6 characters at a time, 60 ms apart (a 107-
+// character tak:// link exact in about 1 s). A piece's leading spaces are dropped by the
+// console and trailing ones kept, so spaces ride at the end of the piece before; those that
+// start a line are sent as Space keys. A backslash is the console's escape: doubled. New
+// lines are Enter, except at the end (a pasted password must not submit by itself).
+static int consolePort;
+static dispatch_queue_t typing;
+
+static BOOL consoleReply(int fd) {
+    char buf[512];
+    NSMutableData *got = [NSMutableData data];
+    for (;;) {
+        ssize_t n = read(fd, buf, sizeof buf);
+        if (n <= 0) return NO;
+        [got appendBytes:buf length:(NSUInteger)n];
+        NSString *s = [[NSString alloc] initWithData:got encoding:NSUTF8StringEncoding] ?: @"";
+        if ([s hasSuffix:@"OK\r\n"] || [s hasSuffix:@"OK\n"]) return YES;
+        if ([s containsString:@"KO"]) { note(@"console: %@", [s stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]); return NO; }
+    }
+}
+
+static BOOL consoleSend(int fd, NSString *cmd) {
+    NSData *d = [[cmd stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];
+    if (write(fd, d.bytes, d.length) != (ssize_t)d.length) return NO;
+    return consoleReply(fd);
+}
+
+static NSArray<NSString *> *consolePieces(NSString *line) {
+    NSMutableArray *out = [NSMutableArray array];
+    NSUInteger i = 0, len = line.length;
+    while (i < len && [line characterAtIndex:i] == ' ') { [out addObject:@"event send EV_KEY:KEY_SPACE:1 EV_KEY:KEY_SPACE:0"]; i++; }
+    while (i < len) {
+        NSMutableString *piece = [NSMutableString string];
+        int chars = 0;
+        while (i < len && chars < 6) {
+            NSRange r = [line rangeOfComposedCharacterSequenceAtIndex:i];
+            NSString *c = [line substringWithRange:r];
+            [piece appendString:[c isEqualToString:@"\\"] ? @"\\\\" : c];
+            i = NSMaxRange(r);
+            chars++;
+        }
+        while (i < len && [line characterAtIndex:i] == ' ') { [piece appendString:@" "]; i++; }
+        [out addObject:[@"event text " stringByAppendingString:piece]];
+    }
+    return out;
+}
+
+static void typeClipboard(void) {
+    NSString *text = [[NSPasteboard generalPasteboard] stringForType:NSPasteboardTypeString];
+    if (!text.length) { note(@"Cmd+V: no text on the Mac clipboard"); NSBeep(); return; }
+    if (text.length > 4000) { note(@"Cmd+V: %lu characters, over 4000; not typed", (unsigned long)text.length); NSBeep(); return; }
+    if (!consolePort) { note(@"Cmd+V: no console port (TAKWERX_CONSOLE_PORT)"); NSBeep(); return; }
+    text = [text stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"];
+    text = [text stringByReplacingOccurrencesOfString:@"\r" withString:@"\n"];
+    while ([text hasSuffix:@"\n"]) text = [text substringToIndex:text.length - 1];
+    NSString *chunk = [text copy];
+    dispatch_async(typing, ^{
+        int fd = socket(AF_INET, SOCK_STREAM, 0);
+        struct sockaddr_in a = { .sin_family = AF_INET, .sin_port = htons((uint16_t)consolePort) };
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        struct timeval tv = { .tv_sec = 3 };
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+        if (fd < 0 || connect(fd, (struct sockaddr *)&a, sizeof a) != 0 || !consoleReply(fd)) {
+            note(@"Cmd+V: console on port %d not reachable", consolePort);
+            if (fd >= 0) close(fd);
+            return;
+        }
+        NSString *tokenPath = [NSHomeDirectory() stringByAppendingPathComponent:@".emulator_console_auth_token"];
+        NSString *token = [[NSString stringWithContentsOfFile:tokenPath encoding:NSUTF8StringEncoding error:nil]
+                           stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (token.length && !consoleSend(fd, [@"auth " stringByAppendingString:token])) {
+            note(@"Cmd+V: console refused the token"); close(fd); return;
+        }
+        NSArray *lines = [chunk componentsSeparatedByString:@"\n"];
+        NSUInteger sent = 0;
+        BOOL ok = YES;
+        for (NSUInteger l = 0; l < lines.count && ok; l++) {
+            if (l > 0) ok = consoleSend(fd, @"event send EV_KEY:KEY_ENTER:1 EV_KEY:KEY_ENTER:0");
+            for (NSString *cmd in consolePieces(lines[l])) {
+                if (!ok) break;
+                usleep(60000);
+                ok = consoleSend(fd, cmd);
+                sent++;
+            }
+        }
+        consoleSend(fd, @"quit");
+        close(fd);
+        note(@"Cmd+V: typed %lu characters in %lu pieces%@", (unsigned long)chunk.length, (unsigned long)sent, ok ? @"" : @", stopped by an error");
+    });
+}
+
 static void start(void) {
     hiddenTools = [NSMutableArray new];
     detached = [NSMutableArray new];
+    typing = dispatch_queue_create("takwerx.typing", DISPATCH_QUEUE_SERIAL);
     [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *e) {
         NSEventModifierFlags m = e.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask &
                                  ~(NSEventModifierFlagCapsLock | NSEventModifierFlagNumericPad);
@@ -175,6 +277,18 @@ static void start(void) {
         BOOL globe = m == NSEventModifierFlagFunction;
         if (e.keyCode == 3 /* kVK_ANSI_F */ && (ctrlCmd || globe)) {
             toggle(ctrlCmd ? @"Ctrl+Cmd+F" : @"Globe+F");
+            return nil;
+        }
+        // Not in Extended Controls, which has text fields of its own. Not "only the main
+        // window" either: full screen on the MacBook, the event's window was not the one
+        // mainWindow() picks, and Cmd+V did nothing (2026-11-17).
+        if (e.keyCode == 9 /* kVK_ANSI_V */ && m == NSEventModifierFlagCommand) {
+            NSWindow *k = e.window ?: NSApp.keyWindow;
+            BOOL extended = [k.title rangeOfString:@"Extended" options:NSCaseInsensitiveSearch].location != NSNotFound;
+            note(@"Cmd+V in window \"%@\" %@ (main window %@)%@", k.title, NSStringFromRect(k.frame),
+                 NSStringFromRect(mainWindow().frame), extended ? @": Extended Controls, left alone" : @"");
+            if (extended) return e;
+            typeClipboard();
             return nil;
         }
         return e;
@@ -239,6 +353,8 @@ __attribute__((constructor)) static void takwerxWindowInit(void) {
     if (lp && *lp) logPath = [NSString stringWithUTF8String:lp];
     const char *fs = getenv("TAKWERX_FULLSCREEN");
     wantFull = fs && strcmp(fs, "1") == 0;
+    const char *cp = getenv("TAKWERX_CONSOLE_PORT");
+    consolePort = cp ? atoi(cp) : 0;
     [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidFinishLaunchingNotification
                                                       object:nil queue:nil usingBlock:^(NSNotification *n) {
         start();
