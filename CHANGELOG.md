@@ -4,7 +4,7 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
-## 0.2.13 — not released yet
+## 0.2.13 — 2026-11-17
 
 - **Enroll ATAK from a TAK Portal QR code by dragging it onto the window** (Mac). ATAK
   Terminal has no camera, so ATAK cannot scan a QR code. Save the QR code as a picture,
@@ -13,6 +13,16 @@ icon mentions a new release within a day of it, and so do `takwerx up` and
 - **`takwerx enroll`** does the same from Terminal: give it the `tak://` link from the
   portal or the QR picture. Chrome inside ATAK Terminal does not open a `tak://` link
   that you type or paste in its address bar; this is the way around that.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac or Linux** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
 
 ## 0.2.12 — 2026-11-17
 
