@@ -1,0 +1,28 @@
+name: Release assets watch
+
+# ops #1021: every release must list its source tarball, SBOM and SHA256SUMS. v0.2.13 and v0.2.14 were cut with
+# release.sh (which only makes the GitHub release) and had none. This reads the Latest release once a day and
+# FAILS THE RUN when a file is missing. A red run shows in the Actions tab and GitHub emails the repo owner.
+# It is NOT a pull_request check and not in checks-ok: it is red between release.sh and the release worker's
+# `release-assets`, and that must not block unrelated PRs. Fix a red run: release-assets atak-terminal vX.Y.Z.
+# Scheduled and manual runs only start from the default branch (main).
+# Run it by hand: Actions tab, Release assets watch, Run workflow. Locally: bash .github/ci/release_assets.sh
+on:
+  schedule:
+    - cron: '23 15 * * *'   # daily, about 7:23 AM PT (8:23 AM in summer)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest-release-has-assets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - env:
+          GH_API_TOKEN: ${{ github.token }}
+        run: bash .github/ci/release_assets.sh
