@@ -67,6 +67,9 @@ finding and why; do not re-derive those.
   installs the candidate fresh and updates the previous release to it, and leaves
   `reports/smoke-X.Y.Z.pass`. `release.sh` refuses to run without that file for this tree.
   The smoke does not start ATAK or touch a Windows PC; the T&E covers those.
+  `release.sh` makes only the GitHub release. The release page must also list the source tarball, SBOM and
+  `SHA256SUMS` (`release-assets atak-terminal vX.Y.Z`, workers/RELEASE.md); `.github/ci/release_assets.sh` fails
+  the PR checks while the newest release lacks them (ops #1021). The updater never reads them: it fetches the tag.
   PR checks run `.github/ci/release_hygiene.sh`: `VERSION` must equal the newest tag and the
   newest `CHANGELOG.md` section (on `dev`, `X.Y.Z-dev` ahead of the tag is fine).
 - External contracts (Google's emulator and images, tak.gov, Lima, scrcpy, MoltenVK, redroid)
