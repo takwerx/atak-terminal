@@ -50,5 +50,5 @@ case "$notes" in *"How to get it"*) footer='' ;; esac
 gh release create "v$v" --title "takwerx $v" --notes "$notes$footer"
 printf '\nReleased takwerx %s. Installed Macs and PCs hear of it within a day; takwerx update fetches it.\n' "$v"
 # The release page must list the source tarball, SBOM and SHA256SUMS (ops #1021: v0.2.13 and v0.2.14 had none).
-# release.sh does not make them; the release worker does, right after. PR checks stay red until they are there.
+# release.sh does not make them; the release worker does, right after. The daily "Release assets watch" run stays red until they are there.
 printf 'Next: release-assets atak-terminal v%s (source tarball, SBOM, SHA256SUMS; workers/RELEASE.md). The release is not done until the page lists all three.\n' "$v"

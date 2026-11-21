@@ -2,7 +2,8 @@
 # Release assets (ops #1021). Every release must list its source tarball, SBOM and SHA256SUMS
 # (workers/RELEASE.md, "Release files"). v0.2.13 and v0.2.14 were cut with ./release.sh, which only
 # makes the GitHub release, and nobody ran release-assets after it, so the newest release had no files.
-# This checks the newest published release (the one GitHub shows as Latest). Run it the same way CI does:
+# This checks the newest published release (the one GitHub shows as Latest). It runs daily in
+# .github/workflows/release-assets-watch.yml (a red run is the alarm; it is not a PR check). Run it by hand:
 #   bash .github/ci/release_assets.sh
 #
 # It fails (exit 1) when that release is missing any of

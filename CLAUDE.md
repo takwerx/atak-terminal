@@ -69,7 +69,7 @@ finding and why; do not re-derive those.
   The smoke does not start ATAK or touch a Windows PC; the T&E covers those.
   `release.sh` makes only the GitHub release. The release page must also list the source tarball, SBOM and
   `SHA256SUMS` (`release-assets atak-terminal vX.Y.Z`, workers/RELEASE.md); `.github/ci/release_assets.sh` fails
-  the PR checks while the newest release lacks them (ops #1021). The updater never reads them: it fetches the tag.
+  the daily "Release assets watch" run while the newest release lacks them (ops #1021; not a PR check). The updater never reads them: it fetches the tag.
   PR checks run `.github/ci/release_hygiene.sh`: `VERSION` must equal the newest tag and the
   newest `CHANGELOG.md` section (on `dev`, `X.Y.Z-dev` ahead of the tag is fine).
 - External contracts (Google's emulator and images, tak.gov, Lima, scrcpy, MoltenVK, redroid)

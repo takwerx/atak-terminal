@@ -7,8 +7,8 @@ name: PR checks
 #   bash .github/ci/test_linux_host.sh    (the Linux host's pure-shell parts; runs on any Linux x86-64; ops #528)
 #   pwsh -File .github/ci/test_windows_gpu.ps1   (the Windows GPU choice; ops #590)
 #   bash .github/ci/test_release_gate.sh  (release.sh refuses to run without a passed install-and-update smoke; ops #693)
-#   bash .github/ci/test_release_assets.sh   (self-test of the next line; ops #1021)
-#   bash .github/ci/release_assets.sh     (the newest release lists its tarball, SBOM and SHA256SUMS; needs the network; ops #1021)
+#   bash .github/ci/test_release_assets.sh   (self-test of release_assets.sh; ops #1021. The live check of the newest
+#                                         release runs daily in release-assets-watch.yml, not here)
 #   bash .github/ci/test_lima_pin.sh      (Lima is 2.3.0 or newer and its pins match the release; ops #825)
 #   bash .github/ci/test_init_runtime.sh  (init --runtime redroid looks for Android on the redroid endpoint; ops #861)
 on:
@@ -97,11 +97,11 @@ jobs:
       - run: bash .github/ci/test_release_gate.sh
       - run: bash tools/release-smoke.sh 99.0.0 --quick
 
-  # The newest release must list its source tarball, SBOM and SHA256SUMS (ops #1021: v0.2.13 and v0.2.14 had none).
-  # Reads the Latest release from GitHub, so a PR turns red in the minutes between `release.sh` and the
-  # release worker's `release-assets`, and stays red until the files are there. Run locally:
-  # bash .github/ci/test_release_assets.sh
-  release-assets:
+  # Self-test of .github/ci/release_assets.sh (ops #1021): made-up release answers, including a release with no
+  # assets (what v0.2.13 and v0.2.14 looked like). It never reads the live release, so it stays green. The live
+  # check runs daily in release-assets-watch.yml; it is not a PR check because it is red between release.sh
+  # and the release worker's `release-assets`, which would block unrelated PRs.
+  release-assets-test:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -109,9 +109,6 @@ jobs:
         with:
           persist-credentials: false
       - run: bash .github/ci/test_release_assets.sh
-      - env:
-          GH_API_TOKEN: ${{ github.token }}
-        run: bash .github/ci/release_assets.sh
 
   # Lima (the VM tool takwerx installs) must stay at 2.3.0 or newer, with the SHA-256 pins the Lima release publishes (ops #825).
   lima-pin:
@@ -147,7 +144,7 @@ jobs:
   # One stable name to require in branch protection. A failed or cancelled job fails it.
   checks-ok:
     if: always()
-    needs: [static, powershell, linux-host, release-hygiene, release-gate, release-assets, lima-pin, init-runtime, workflow-pins]
+    needs: [static, powershell, linux-host, release-hygiene, release-gate, release-assets-test, lima-pin, init-runtime, workflow-pins]
     runs-on: ubuntu-24.04
     steps:
       - env:
