@@ -38,7 +38,7 @@ jobs:
         with:
           python-version: '3.12'
       # shellcheck pinned so "error" means the same thing every run (the runner image's own moves).
-      - run: pip install shellcheck-py==0.11.0.1 pyyaml && shellcheck --version
+      - run: pip install --require-hashes -r .github/ci/requirements-ci.lock && shellcheck --version
       - run: bash .github/ci/static_checks.sh
 
   # PowerShell parse check for the Windows engine (install.ps1, takwerx.ps1, lib/windows/, tools/).
