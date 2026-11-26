@@ -194,6 +194,14 @@ cmd_init() {
 
 # The GPU runtime: no VM, no admin password. Google's licence, about 2 GB of downloads,
 # the device, first boot, then ATAK.
+# Prints the APK to install: the one in Downloads if the user says yes, else the picker's.
+init_ask_apk() {
+  local a
+  a=$(find_atak_apk)
+  if [ -n "$a" ] && confirm "Found $(basename "$a") in Downloads. Install it?"; then printf '%s\n' "$a"; return 0; fi
+  say "ATAK-CIV comes from https://tak.gov/products/atak-civ (login needed). A file picker opens now; cancel it if you have not downloaded it yet." >&2
+  atak_pick
+}
 init_emulator() {
   local apk=$1 open=$2 a restarted=0
   emu_disk_check
@@ -207,15 +215,15 @@ init_emulator() {
     step "Restarting Android on the new emulator build (about a minute; ATAK and its data come back)"
     emu_stop; restarted=1
   fi
-  emu_up
-  if [ -z "$apk" ] && ! atak_installed; then
-    a=$(find_atak_apk)
-    if [ -n "$a" ] && confirm "Found $(basename "$a") in Downloads. Install it?"; then apk=$a; fi
-    if [ -z "$apk" ]; then
-      say "ATAK-CIV comes from https://tak.gov/products/atak-civ (login needed). A file picker opens now; cancel it if you have not downloaded it yet."
-      apk=$(atak_pick)
-    fi
+  # The APK question comes before Android starts when the answer is already known: a new
+  # device has no ATAK. Asked after boot, the Android window covered the Terminal question
+  # and the first install sat at Android's home screen (MacBook, 2026-11-25).
+  local asked=0
+  if [ -z "$apk" ] && { [ ! -f "$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" ] || { emu_running && ! atak_installed; }; }; then
+    apk=$(init_ask_apk); asked=1
   fi
+  emu_up
+  if [ -z "$apk" ] && [ "$asked" = 0 ] && ! atak_installed; then apk=$(init_ask_apk); fi
   local first=0
   if [ -n "$apk" ]; then atak_install "$apk"; market_install; icons_refresh; first=1; fi
   location_refresh
@@ -502,8 +510,9 @@ cmd_uninstall() {
   if [ -x "$LIMACTL" ]; then vm_delete; fi
   app_remove
   bridged_remove
+  path_remove
   rm -rf "$TAKWERX_ROOT"
-  ok "Removed. The PATH line in your shell profile is harmless and can be deleted by hand."
+  ok "Removed. Open a new terminal window: this one still knows the takwerx command."
 }
 
 cmd_runtime() {

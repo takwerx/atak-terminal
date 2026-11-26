@@ -114,6 +114,7 @@ path_setup() {
   done
   if [ "$found" = 0 ]; then printf '# takwerx\n%s\n' "$line" >"$HOME/.bashrc"; fi
 }
+path_remove() { path_lines_remove "$HOME/.bashrc" "$HOME/.zshrc"; }
 
 # Android's position from the desktop's own location service, if it has one: GeoClue's
 # demo client prints "Latitude: 12.3456789°", "Longitude: ...", "Accuracy: 20.0 meters".

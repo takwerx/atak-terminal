@@ -4,6 +4,28 @@ Newest first. `takwerx update` brings an installed Mac to the newest release; th
 icon mentions a new release within a day of it, and so do `takwerx up` and
 `takwerx status` in a terminal.
 
+## 0.2.15 — 2026-11-25
+
+- **A new install no longer stops at Android's home screen.** When the ATAK APK was in
+  Downloads, `takwerx init` asked "Install it?" in Terminal, but only after the Android
+  window had opened on top of Terminal. You saw Android with Chrome and no ATAK, while
+  takwerx waited for an answer you could not see. A new install now asks before Android
+  starts, then opens Android and goes straight on to ATAK. The same fix is in the
+  Windows version.
+- **`takwerx uninstall` cleans up completely** (Mac and Linux). It now also removes the
+  line it added to your shell profile (`~/.zshrc`), and it no longer ends with a
+  "No such file or directory" error.
+
+**How to get it**
+
+- **Already installed:** open Terminal on a Mac, or PowerShell on Windows, and run
+  `takwerx update`. If Android is running, it restarts by itself (about a minute) and
+  ATAK comes back with its data.
+- **New install on a Mac or Linux** (Terminal):
+  `curl -fsSL https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.sh | bash`
+- **New install on Windows** (PowerShell):
+  `irm https://raw.githubusercontent.com/takwerx/atak-terminal/main/install.ps1 | iex`
+
 ## 0.2.14 — 2026-11-17
 
 - **Command+V pastes Mac text into Android** (Mac). Copy a text on the Mac, click into a
