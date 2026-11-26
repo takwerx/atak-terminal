@@ -50,6 +50,16 @@ it, and updating the hash together with the version.
   latest release that matches the ATAK version at run time, so it is not pinned
   (`api.github.com/repos/takwerx/takwerx-market/releases/latest`). Plugins installed through the
   Market arrive with `shouldLoad=false` until ATAK is told to load them (DECISIONS 2026-09-27 afternoon).
+- **GitHub's API gives 60 calls an hour per address with no token** (docs.github.com, REST API rate
+  limits). Behind a shared address (office, hotspot, VPN) the answer is HTTP 403 with
+  "API rate limit exceeded". The github.com pages are not under that limit, so `market_asset_url`
+  falls back to them: `github.com/takwerx/takwerx-market/releases/latest` redirects to
+  `.../releases/tag/TAG`, and `.../releases/expanded_assets/TAG` lists the APK links.
+  ✅ verified 2026-11-25 on the Mac Studio with its API quota at 0: API 403, the redirect and the
+  asset list answered, and the 5.8.0 and 5.7.0 APK links came back (ops #1274). The expanded_assets
+  page is a GitHub web page, not a documented API: if GitHub changes it, the fallback finds nothing
+  and `test_market_lookup.sh` would still pass, so re-check it by hand when the Market step says
+  "No Market build" while the release page shows one.
 
 ## Android Emulator behaviour we depend on
 
