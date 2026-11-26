@@ -60,6 +60,7 @@ path_setup() {
   done
   if [ "$found" = 0 ]; then printf '# takwerx\n%s\n' "$line" >"$HOME/.zshrc"; fi
 }
+path_remove() { path_lines_remove "$HOME/.zshrc" "$HOME/.bash_profile"; }
 
 # Interface that carries the default route (Wi-Fi or Ethernet), e.g. en0 or en1.
 default_interface() { route -n get default 2>/dev/null | awk '/interface:/{print $2}'; }

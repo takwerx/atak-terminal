@@ -66,12 +66,32 @@ else
 fi
 
 LOG_FILE="$TAKWERX_LOGS/takwerx.log"
-log()  { printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$LOG_FILE"; }
+# No log folder (after `takwerx uninstall` deletes it): the message goes to the screen only.
+log()  { [ -d "$TAKWERX_LOGS" ] || return 0; printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$LOG_FILE"; }
 say()  { printf '%s\n' "$*"; log "$*"; }
 step() { printf '\n%s==> %s%s\n' "$BOLD" "$*" "$NC"; log "==> $*"; }
 ok()   { printf '%s  ok%s  %s\n' "$GREEN" "$NC" "$*"; log "ok: $*"; }
 warn() { printf '%s  !!%s  %s\n' "$YELLOW" "$NC" "$*" >&2; log "warn: $*"; }
 die()  { printf '%sError:%s %s\n' "$RED" "$NC" "$*" >&2; log "error: $*"; alert "$*"; exit 1; }
+
+# Takes out of each shell profile given what path_setup added: the export line, the
+# "# takwerx" line above it and the blank line above that. Nothing else changes. The file
+# is rewritten in place (cat >), so a profile that is a symlink stays one.
+path_lines_remove() {
+  local line="export PATH=\"$TAKWERX_BIN:\$PATH\"" rc tmp
+  for rc in "$@"; do
+    [ -f "$rc" ] && grep -qxF "$line" "$rc" || continue
+    tmp=$(mktemp) || return 0
+    awk -v line="$line" '
+      function emit() { if (nb) print ""; if (hc) print "# takwerx"; nb = 0; hc = 0 }
+      $0 == "" { if (hc) emit(); else if (nb) print ""; nb = 1; next }
+      $0 == "# takwerx" { if (hc) emit(); hc = 1; next }
+      $0 == line { nb = 0; hc = 0; next }
+      { emit(); print }
+      END { emit() }' "$rc" >"$tmp" && cat "$tmp" >"$rc"
+    rm -f "$tmp"
+  done
+}
 
 # True when a terminal is available for prompts, even when stdin is a pipe (curl | bash).
 have_tty() { [ -r /dev/tty ] && [ -w /dev/tty ] && { : </dev/tty; } 2>/dev/null; }

@@ -75,15 +75,21 @@ function Invoke-Init([string[]]$a) {
         }
         return
     }
-    Invoke-EmuUp
-    if (-not $apk -and -not (Test-AtakInstalled)) {
+    # The APK question comes before Android starts when the answer is already known: a new
+    # device has no ATAK. Asked after boot, the Android window covered the question (Mac,
+    # 2026-11-25).
+    $askApk = {
         $found = Find-AtakApk
-        if ($found -and (Confirm-Yes "Found $(Split-Path $found -Leaf) in Downloads. Install it?")) { $apk = $found }
-        if (-not $apk) {
-            Say 'ATAK-CIV comes from https://tak.gov/products/atak-civ (login needed). A file picker opens now; cancel it if you have not downloaded it yet.'
-            $apk = Select-AtakApk
-        }
+        if ($found -and (Confirm-Yes "Found $(Split-Path $found -Leaf) in Downloads. Install it?")) { return $found }
+        Say 'ATAK-CIV comes from https://tak.gov/products/atak-civ (login needed). A file picker opens now; cancel it if you have not downloaded it yet.'
+        return (Select-AtakApk)
     }
+    $asked = $false
+    if (-not $apk -and (-not (Test-Path (Join-Path $AvdHome "$Avd.avd\config.ini")) -or ((Test-EmuRunning) -and -not (Test-AtakInstalled)))) {
+        $apk = & $askApk; $asked = $true
+    }
+    Invoke-EmuUp
+    if (-not $apk -and -not $asked -and -not (Test-AtakInstalled)) { $apk = & $askApk }
     $first = $false
     if ($apk) { Install-Atak $apk; Install-Market; Build-App; $first = $true }
     Update-Position
