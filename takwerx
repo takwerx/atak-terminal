@@ -111,16 +111,52 @@ market_register_after_first_run() {
 }
 
 # Latest Market release carries one APK per ATAK version; pick the one for the installed ATAK.
+#
+# market_asset_url VER prints the download URL of the Market APK for ATAK VER. It asks GitHub's
+# API first. The API gives 60 calls an hour per address with no token, and a shared address
+# (office, hotspot, VPN) runs out (ops #1274). Then it reads the same release from the github.com
+# pages, which that limit does not cover: /releases/latest redirects to the tag, and the tag's
+# expanded_assets page lists the APKs. Return codes: 0 found (URL on stdout), 1 the release has no
+# build for this ATAK, 2 GitHub is limiting requests from this address, 3 GitHub did not answer.
+market_asset_url() {
+  local ver=$1 repo=takwerx/takwerx-market body code tag page href url
+  body=$(mktemp "${TMPDIR:-/tmp}/takwerx-market.XXXXXX")
+  code=$(curl -sSL --max-time 20 -o "$body" -w '%{http_code}' "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null) || code=000
+  if [ "$code" = 200 ]; then
+    url=$(grep -oE '"browser_download_url": *"[^"]*--'"$ver"'-civ-release\.apk"' "$body" | sed 's/.*"\(http[^"]*\)"/\1/' | head -n1)
+    rm -f "$body"
+    [ -n "$url" ] || return 1
+    printf '%s\n' "$url"; return 0
+  fi
+  local limited=0
+  if [ "$code" = 429 ] || { [ "$code" = 403 ] && grep -qi 'rate limit' "$body" 2>/dev/null; }; then limited=1; fi
+  rm -f "$body"
+  log "market: API answered HTTP $code; reading the release page instead"
+  tag=$(curl -fsSL --max-time 20 -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest" 2>/dev/null) || tag=''
+  tag=${tag##*/releases/tag/}
+  if [ -n "$tag" ] && [[ $tag != *[!A-Za-z0-9._-]* ]]; then
+    if page=$(curl -fsSL --max-time 20 "https://github.com/$repo/releases/expanded_assets/$tag" 2>/dev/null); then
+      href=$(printf '%s\n' "$page" | grep -oE 'href="[^"]*--'"$ver"'-civ-release\.apk"' | sed 's/^href="//; s/"$//' | head -n1 || true)
+      if [ -n "$href" ]; then printf 'https://github.com%s\n' "$href"; return 0; fi
+      return 1   # the page answered, so GitHub is reachable: only this ATAK has no build
+    fi
+  fi
+  [ "$limited" = 1 ] && return 2
+  return 3
+}
+
 market_install() {
-  local ver rel url apk
+  local ver url apk rc=0
   ver=$(atak_version | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)
   if [ -z "$ver" ]; then warn "ATAK is not installed; Market is installed after ATAK"; return 0; fi
   step "TAKWERX Market plugin for ATAK $ver"
-  if ! rel=$(curl -fsSL --max-time 20 "https://api.github.com/repos/takwerx/takwerx-market/releases/latest" 2>/dev/null); then
-    warn "Could not reach GitHub; run 'takwerx market' when online"; return 0
-  fi
-  url=$(printf '%s' "$rel" | grep -oE '"browser_download_url": *"[^"]*--'"$ver"'-civ-release\.apk"' | sed 's/.*"\(http[^"]*\)"/\1/' | head -n1)
-  if [ -z "$url" ]; then warn "No Market build for ATAK $ver in the latest release"; return 0; fi
+  url=$(market_asset_url "$ver") || rc=$?
+  case "$rc" in
+    0) ;;
+    1) warn "No Market build for ATAK $ver in the latest release"; return 0 ;;
+    2) warn "GitHub is limiting requests from your address; run 'takwerx market' again in an hour"; return 0 ;;
+    *) warn "Could not reach GitHub; run 'takwerx market' when online"; return 0 ;;
+  esac
   apk="$TAKWERX_CACHE/$(basename "$url")"
   download "$url" "$apk"
   "$ADB" -s "$ADB_ENDPOINT" install -r -g "$apk" >/dev/null || { warn "Market install failed"; return 0; }

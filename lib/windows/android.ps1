@@ -143,21 +143,60 @@ function Install-DataPackage([string]$zip) {
 
 # ---- the TAKWERX Market -------------------------------------------------------------------------
 # The latest Market release carries one APK per ATAK version; the one for the installed ATAK.
+# Find-MarketApk VER: the download URL of the Market APK for ATAK VER, or $null; $script:MarketWhy
+# says why not: 'nobuild' (the release has none for this ATAK), 'limited' (GitHub is limiting
+# requests from this address) or 'unreachable'. It asks GitHub's API first. The API gives 60 calls an
+# hour per address with no token, and a shared address runs out (ops #1274). Then it reads the same
+# release from the github.com pages, which that limit does not cover: /releases/latest redirects
+# to the tag, and the tag's expanded_assets page lists the APKs. Same steps as market_asset_url in takwerx.
+function Find-MarketApk([string]$ver) {
+    $repo = 'takwerx/takwerx-market'
+    $script:MarketWhy = 'unreachable'
+    $limited = $false
+    try {
+        $rel = Invoke-RestMethod -UseBasicParsing -TimeoutSec 20 "https://api.github.com/repos/$repo/releases/latest"
+        $asset = $rel.assets | Where-Object { $_.name -match ('--' + [regex]::Escape($ver) + '-civ-release\.apk$') } | Select-Object -First 1
+        if ($asset) { return $asset.browser_download_url }
+        $script:MarketWhy = 'nobuild'; return $null
+    } catch {
+        $code = 0
+        try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+        if ($code -eq 429 -or $code -eq 403) { $limited = $true }
+        Log "market: API answered HTTP $code; reading the release page instead"
+    }
+    $tag = (& curl.exe -fsSL --max-time 20 -o NUL -w '%{url_effective}' "https://github.com/$repo/releases/latest" 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $tag -match '/releases/tag/([A-Za-z0-9._-]+)$') {
+        $page = (& curl.exe -fsSL --max-time 20 "https://github.com/$repo/releases/expanded_assets/$($Matches[1])" 2>$null) -join "`n"
+        if ($LASTEXITCODE -eq 0) {
+            if ($page -match ('href="([^"]*--' + [regex]::Escape($ver) + '-civ-release\.apk)"')) { return 'https://github.com' + $Matches[1] }
+            $script:MarketWhy = 'nobuild'; return $null
+        }
+    }
+    if ($limited) { $script:MarketWhy = 'limited' }
+    return $null
+}
+
 function Install-Market {
     $ver = ''
     if ((Get-AtakVersion) -match '^(\d+\.\d+\.\d+)') { $ver = $Matches[1] }
     if (-not $ver) { Warn 'ATAK is not installed; the Market is installed after ATAK'; return }
     Step "TAKWERX Market plugin for ATAK $ver"
-    try { $rel = Invoke-RestMethod -UseBasicParsing -TimeoutSec 20 'https://api.github.com/repos/takwerx/takwerx-market/releases/latest' }
-    catch { Warn "Could not reach GitHub; run 'takwerx market' when online"; return }
-    $asset = $rel.assets | Where-Object { $_.name -match ('--' + [regex]::Escape($ver) + '-civ-release\.apk$') } | Select-Object -First 1
-    if (-not $asset) { Warn "No Market build for ATAK $ver in the latest release"; return }
-    $apk = Join-Path $Cache $asset.name
-    Get-Download $asset.browser_download_url $apk
+    $url = Find-MarketApk $ver
+    if (-not $url) {
+        switch ($script:MarketWhy) {
+            'nobuild' { Warn "No Market build for ATAK $ver in the latest release" }
+            'limited' { Warn "GitHub is limiting requests from your address; run 'takwerx market' again in an hour" }
+            default   { Warn "Could not reach GitHub; run 'takwerx market' when online" }
+        }
+        return
+    }
+    $name = $url.Substring($url.LastIndexOf('/') + 1)
+    $apk = Join-Path $Cache $name
+    Get-Download $url $apk
     $r = Adb 'install' '-r' '-g' $apk
     if ($r -notmatch 'Success') { Warn "Market install failed: $r"; return }
     Set-Conf 'MARKET_APK' $apk
-    Ok ("Market {0} installed" -f ($asset.name -replace '^.*Market-([0-9.]+)--.*$', '$1'))
+    Ok ("Market {0} installed" -f ($name -replace '^.*Market-([0-9.]+)--.*$', '$1'))
 }
 
 # A plugin installed before ATAK's first run gets no "should load" entry and is skipped; one
