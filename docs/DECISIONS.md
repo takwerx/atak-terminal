@@ -1508,3 +1508,32 @@ are closed in the code and each has a test. Where each is explained and what is 
 The older-release gap this audit found first (`takwerx update` accepting an older release) is closed by
 ops #1318 above; the two fit: #1318 stops the app going back, this one stops the Android data
 being met by an older image.
+
+## 2026-11-27: closing the Terminal window that ran takwerx must not power Android off (ops #1411, #1431)
+
+The Android emulator takes SIGHUP as a power-off request and installs a handler of its own, so
+`nohup` (which only sets SIGHUP to "ignore") does not protect it. Closing a Terminal window closes the
+pty master, and the kernel then sends SIGHUP to the foreground process group. Verified on the Studio
+(macOS 26.5, Apple Silicon, emulator 37.1.11):
+
+- Window closed while `takwerx up` was still waiting for Android to boot: the emulator was gone 2 s later.
+- Window closed after the command had finished: Android kept running (the emulator is then in a
+  background process group, and the interactive shell only hangs up its own jobs).
+
+So the exposure is the time a takwerx command runs in the window: `init`, `update`, `up`, `restart`.
+The fix is to start the emulator in a session of its own (no controlling terminal, so no hangup):
+`setsid` on Linux (0.2.16), and on the Mac, which has no `setsid` command, `perl -MPOSIX -e
+'POSIX::setsid(); exec ...'`, which runs the emulator in place (same process, same command line, so
+`emu_pid` and `takwerx down` still find it). Both go through `own_session_init` in `lib/common.sh`.
+With neither, the start is as before. Side effect: Ctrl-C in the window no longer also stops Android.
+
+A running Android started by an older takwerx keeps its old process group until it is restarted
+(`takwerx restart`, or a restart after the Mac restarts). That only matters while a takwerx command is
+running in the window that started it. The helper loops takwerx starts (plugin prompt watchdog, QR
+drop watcher) are not moved; they restart at the next `takwerx up` or app open.
+
+How it was tested without a window: `pty.fork()` makes an interactive zsh the session leader of a pty,
+the command is typed into it, and closing the master side is the closed window (same kernel signal as
+Terminal.app). A real Terminal.app window was not driven: a script cannot do it without a macOS
+automation prompt on the screen. `.github/ci/test_update_edges.sh` check 5 runs the same hangup on a
+Linux runner with `setsid` hidden from PATH, so the perl path runs.

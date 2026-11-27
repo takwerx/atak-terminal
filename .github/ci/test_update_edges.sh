@@ -7,7 +7,10 @@
 #   3. init_emulator does not open the APK file picker while Android is not answering on adb
 #      (the update sat 7 minutes on a macOS dialog), and still asks first when Android answers and ATAK is missing
 #   4. closing the terminal that started the emulator on Linux does not hang it up (QEMU shuts down on SIGHUP)
-# Needs no Android, no VM and no network. Check 4 runs on Linux only (setsid).
+#   5. the same on a host with no setsid command, which is every Mac: perl starts the emulator in its own
+#      session (ops #1431; the Mac's emulator died when the Terminal window that ran takwerx closed)
+# Needs no Android, no VM and no network. Checks 4 and 5 run on Linux only (the stand-in emulator is started by
+# emu_start_linux; the Mac's start line uses the same own_session_init helper, and was run on a real Mac).
 set -uo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -88,7 +91,8 @@ check "init_emulator does not open the APK picker while adb is offline" t_adb_of
 check "init_emulator still asks first when Android answers and ATAK is missing" t_adb_online
 
 # --- 4. a hangup on the terminal does not stop the emulator (Linux) -----------------------------------
-t_hangup() {
+t_hangup() { # t_hangup [PATH for the start script]
+  local startpath=${1:-$PATH}
   mkdir -p "$WORK/fakeemu"
   # A stand-in for QEMU: its own SIGHUP handler (nohup's "ignore" is replaced, as QEMU does), a marker when hung up.
   cat > "$WORK/fakeemu/emulator" <<EOS
@@ -104,7 +108,7 @@ EOS
   chmod +x "$WORK/fakeemu/emulator"
   cat > "$WORK/start.sh" <<EOS
 set -euo pipefail
-export HOME="$HOME" TAKWERX_ROOT="$TAKWERX_ROOT" DISPLAY=""
+export HOME="$HOME" TAKWERX_ROOT="$TAKWERX_ROOT" DISPLAY="" PATH="$startpath"
 TAKWERX_APP="$REPO"; TAKWERX_VERSION=\$(cat "$REPO/VERSION")
 . "$REPO/lib/common.sh"; . "$REPO/lib/host-linux.sh"; . "$REPO/lib/vm.sh"; . "$REPO/lib/android.sh"; . "$REPO/lib/emulator.sh"
 EMU_DIR="$WORK/fakeemu"
@@ -141,6 +145,27 @@ if [ "$(uname -s)" = Linux ] && command -v setsid >/dev/null 2>&1; then
   check "closing the terminal does not hang up the emulator (Linux)" t_hangup
 else
   echo "skip closing the terminal (Linux with setsid only)"
+fi
+
+# --- 5. the same with no setsid command (macOS has none): perl makes the new session -----------------
+# A PATH made of links to everything in /usr/bin and /bin except setsid. Before ops #1431 the start line
+# then had no session of its own and nohup alone left the emulator's own SIGHUP handler in charge.
+t_hangup_no_setsid() {
+  command -v perl >/dev/null 2>&1 || { echo "perl is missing on this runner"; return 1; }
+  mkdir -p "$WORK/nosetsid"
+  local f n
+  for f in /usr/bin/* /bin/*; do
+    n=${f##*/}
+    [ "$n" = setsid ] && continue
+    [ -e "$WORK/nosetsid/$n" ] || ln -s "$f" "$WORK/nosetsid/$n"
+  done
+  if env PATH="$WORK/nosetsid" bash -c 'command -v setsid' >/dev/null 2>&1; then echo "setsid is still on the test PATH"; return 1; fi
+  t_hangup "$WORK/nosetsid"
+}
+if [ "$(uname -s)" = Linux ] && command -v setsid >/dev/null 2>&1; then
+  check "closing the terminal does not hang up the emulator when there is no setsid (the Mac)" t_hangup_no_setsid
+else
+  echo "skip closing the terminal without setsid (Linux with setsid only)"
 fi
 
 [ "$FAILS" -eq 0 ] || { echo "$FAILS check(s) failed"; exit 1; }
