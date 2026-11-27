@@ -130,7 +130,7 @@ function Get-Sha256([string]$path) { return (Get-FileHash -Algorithm SHA256 -Pat
 # crawls on large files), skipped when DEST is already there and verifies. A cached DEST that
 # does not match is fetched again; a download that does not match is deleted and refused
 # before anything uses it.
-function Get-Download([string]$url, [string]$dest, [string]$sha256 = '') {
+function Get-Download([string]$url, [string]$dest, [string]$sha256 = '', [string]$from = 'versions.env pins') {
     if ((Test-Path $dest) -and ((-not $sha256) -or ((Get-Sha256 $dest) -eq $sha256))) { return }
     Step ("Downloading " + (Split-Path $dest -Leaf))
     $part = "$dest.part"
@@ -139,7 +139,7 @@ function Get-Download([string]$url, [string]$dest, [string]$sha256 = '') {
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $part)) { Remove-Item $part -ErrorAction SilentlyContinue; Die "Download failed: $url" }
     if ($sha256) {
         $have = Get-Sha256 $part
-        if ($have -ne $sha256) { Remove-Item $part -Force; Die ("Refused {0}: its SHA-256 is {1}, but versions.env pins {2}. The file is deleted and nothing was installed. Run the command again; if this repeats, the download is being altered on the way, so report it" -f (Split-Path $dest -Leaf), $have, $sha256) }
+        if ($have -ne $sha256) { Remove-Item $part -Force; Die ("Refused {0}: its SHA-256 is {1}, but {3} {2}. The file is deleted and nothing was installed. Run the command again; if this repeats, the download is being altered on the way, so report it" -f (Split-Path $dest -Leaf), $have, $sha256, $from) }
     }
     Move-Item -Force $part $dest
 }

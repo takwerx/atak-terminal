@@ -46,7 +46,20 @@ host_tools_install() {
     unpack_to "$tgz" "$SCRCPY_DIR" "$SCRCPY_VERSION" 1
   fi
   ok "scrcpy $(tool_version "$SCRCPY_DIR")"
+  # Old versions' tarballs are not kept (the cache was never pruned, ops #1319).
+  local f
+  for f in "$TAKWERX_CACHE"/lima-*-Darwin-*.tar.gz "$TAKWERX_CACHE"/scrcpy-macos-*.tar.gz; do
+    [ -e "$f" ] || continue
+    case "$(basename "$f")" in
+      "lima-$LIMA_VERSION-Darwin-$HOST_ARCH.tar.gz"|"scrcpy-macos-$SCRCPY_ARCH-v$SCRCPY_VERSION.tar.gz") ;;
+      *) rm -f "$f" ;;
+    esac
+  done
 }
+
+# host_tools_stale: this run will replace Lima or scrcpy (ops #1319). takwerx stops Android first.
+lima_stale() { tool_needs Lima "$LIMA_DIR" "$LIMA_VERSION" 2>/dev/null; }
+host_tools_stale() { lima_stale || tool_needs scrcpy "$SCRCPY_DIR" "$SCRCPY_VERSION" 2>/dev/null; }
 
 # Puts `takwerx` on the PATH for new terminals. The app icon uses the same launcher.
 path_setup() {

@@ -16,6 +16,10 @@
 #   3. API rate-limited and the pages fail: "GitHub is limiting requests", not "Could not reach"
 #   4. nothing answers: "Could not reach GitHub"
 #   5. API rate-limited, pages work, but the release has no build for this ATAK: "No Market build"
+#   6. (ops #1319) the SHA-256 GitHub lists for the file is handed to the download, from the API and
+#      from the web page (the file's own, not its neighbour's)
+#   7. (ops #1319) a file that does not match the SHA-256 GitHub lists is refused, deleted, never installed
+#   8. (ops #1319) a file listed with no SHA-256 is not installed
 set -uo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -52,7 +56,8 @@ asset() { printf 'https://github.com/takwerx/takwerx-market/releases/download/v1
 case "$url" in
   https://api.github.com/repos/takwerx/takwerx-market/releases/latest)
     case "$FAKE_API" in
-      ok)      emit 200 "{\"assets\":[{\"browser_download_url\": \"$(asset 5.7.0)\"},{\"browser_download_url\": \"$(asset 5.8.0)\"}]}" ;;
+      ok)      emit 200 "{\"assets\":[{\"digest\": \"sha256:$sum57\",\"browser_download_url\": \"$(asset 5.7.0)\"},{\"digest\": \"sha256:$sum58\",\"browser_download_url\": \"$(asset 5.8.0)\"}]}" ;;
+      nodigest) emit 200 "{\"assets\":[{\"digest\": null,\"browser_download_url\": \"$(asset 5.8.0)\"}]}" ;;
       limited) emit 403 '{"message":"API rate limit exceeded for 203.0.113.9. (But here is the good news: Authenticated requests get a higher rate limit.)"}' ;;
       *)       exit 6 ;;
     esac ;;
@@ -61,8 +66,19 @@ case "$url" in
     emit 200 '' https://github.com/takwerx/takwerx-market/releases/tag/v1.8 ;;
   https://github.com/takwerx/takwerx-market/releases/expanded_assets/v1.8)
     [ "$FAKE_WEB" = ok ] || exit 6
-    emit 200 "<a href=\"/takwerx/takwerx-market/releases/download/v1.8/ATAK-Plugin-TakwerxMarket-1.8--5.7.0-civ-release.apk\">a</a>
-<a href=\"/takwerx/takwerx-market/releases/download/v1.8/ATAK-Plugin-TakwerxMarket-1.8--5.8.0-civ-release.apk\">b</a>" ;;
+    if [ "${FAKE_PAGE_DIGESTS:-1}" = 1 ]; then
+      emit 200 "<a href=\"/takwerx/takwerx-market/releases/download/v1.8/ATAK-Plugin-TakwerxMarket-1.8--5.7.0-civ-release.apk\">a</a>
+<span>sha256:$sum57</span>
+<a href=\"/takwerx/takwerx-market/releases/download/v1.8/ATAK-Plugin-TakwerxMarket-1.8--5.8.0-civ-release.apk\">b</a>
+<span>sha256:$sum58</span>
+<a href=\"/takwerx/takwerx-market/archive/refs/tags/v1.8.zip\">Source</a>"
+    else   # the 5.8.0 file has no digest; its neighbour (5.7.0, listed first) has one
+      emit 200 "<a href=\"/takwerx/takwerx-market/releases/download/v1.8/ATAK-Plugin-TakwerxMarket-1.8--5.7.0-civ-release.apk\">a</a>
+<span>sha256:$sum57</span>
+<a href=\"/takwerx/takwerx-market/releases/download/v1.8/ATAK-Plugin-TakwerxMarket-1.8--5.8.0-civ-release.apk\">b</a>
+<a href=\"/takwerx/takwerx-market/archive/refs/tags/v1.8.zip\">Source</a>"
+    fi ;;
+  *.apk) printf 'not the file GitHub lists' > "$out"; exit 0 ;;
   *) echo "fake curl: unexpected URL $url" >&2; exit 7 ;;
 esac
 EOS
@@ -75,6 +91,10 @@ case "$*" in *install*) echo "Success" ;; *) echo ok ;; esac
 EOS
 chmod +x "$WORK/adb"
 
+# GitHub's own SHA-256 for each build, as the fake curl serves them.
+sum57=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+sum58=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+export sum57 sum58
 export HOME="$WORK/home" TAKWERX_ROOT="$WORK/home/.takwerx" ADB_BIN="$WORK/adb" FAKE_LOG="$WORK/curl.log"
 mkdir -p "$HOME"
 export PATH="$WORK/bin:$PATH"
@@ -90,7 +110,7 @@ run_market() {
     eval "$(awk '/^market_asset_url\(\) \{/{p=1} p{print} p&&/^}/{exit}' "$REPO/takwerx")"
     eval "$(awk '/^market_install\(\) \{/{p=1} p{print} p&&/^}/{exit}' "$REPO/takwerx")"
     ATAK=$1; atak_version() { echo "$ATAK"; }
-    download() { echo "DOWNLOAD $1"; }
+    if [ -z "${REAL_DOWNLOAD:-}" ]; then download() { echo "DOWNLOAD $1 sha=${3:-none}"; }; fi
     config_set() { :; }
     ADB=$WORK/adb; ADB_ENDPOINT=fake; TAKWERX_CACHE=$WORK/cache; mkdir -p "$TAKWERX_CACHE"
     market_install ) 2>&1
@@ -134,6 +154,39 @@ t_nobuild() {
   grep -q 'No Market build for ATAK 5.9.0 in the latest release' <<<"$o" || { echo "wrong message:"; echo "$o"; return 1; }
 }
 check "pages work but the release has no build for this ATAK: says No Market build" t_nobuild
+
+t_sha_passed() {
+  local o
+  o=$(FAKE_API=ok FAKE_WEB=down run_market 5.8.0.1)
+  grep -qF "$APK58 sha=$sum58" <<<"$o" || { echo "the API's SHA-256 was not passed to the download:"; echo "$o"; return 1; }
+  o=$(FAKE_API=limited FAKE_WEB=ok run_market 5.7.0.3)
+  grep -qF "5.7.0-civ-release.apk sha=$sum57" <<<"$o" || { echo "the page's SHA-256 for 5.7.0 was not passed to the download (neighbour's?):"; echo "$o"; return 1; }
+  o=$(FAKE_API=limited FAKE_WEB=ok run_market 5.8.0.1)
+  grep -qF "$APK58 sha=$sum58" <<<"$o" || { echo "the page's SHA-256 for 5.8.0 was not passed to the download:"; echo "$o"; return 1; }
+}
+check "the SHA-256 GitHub lists (API and page) is passed to the download, the file's own" t_sha_passed
+
+t_mismatch() {
+  local o rc
+  o=$(FAKE_API=ok FAKE_WEB=down REAL_DOWNLOAD=1 run_market 5.8.0.1); rc=$?
+  [ "$rc" -ne 0 ] || { echo "a file that does not match was accepted:"; echo "$o"; return 1; }
+  grep -q 'Refused ATAK-Plugin-TakwerxMarket-1.8--5.8.0-civ-release.apk' <<<"$o" || { echo "no refusal message:"; echo "$o"; return 1; }
+  grep -q 'but GitHub lists' <<<"$o" || { echo "the message blames versions.env:"; echo "$o"; return 1; }
+  ! grep -q 'Market 1.8 installed' <<<"$o" || { echo "installed it anyway:"; echo "$o"; return 1; }
+  [ ! -e "$WORK/cache/ATAK-Plugin-TakwerxMarket-1.8--5.8.0-civ-release.apk" ] || { echo "the refused file was kept in the cache"; return 1; }
+}
+check "a file that does not match GitHub's SHA-256 is refused and deleted" t_mismatch
+
+t_nodigest() {
+  local o
+  o=$(FAKE_API=nodigest FAKE_WEB=down run_market 5.8.0.1)
+  grep -q 'lists no SHA-256' <<<"$o" || { echo "wrong message (API, digest null):"; echo "$o"; return 1; }
+  ! grep -q 'DOWNLOAD' <<<"$o" || { echo "downloaded a file with no SHA-256:"; echo "$o"; return 1; }
+  o=$(FAKE_API=limited FAKE_WEB=ok FAKE_PAGE_DIGESTS=0 run_market 5.8.0.1)
+  grep -q 'lists no SHA-256' <<<"$o" || { echo "wrong message (page, no digest; the neighbour's is not used):"; echo "$o"; return 1; }
+  ! grep -q 'DOWNLOAD' <<<"$o" || { echo "downloaded a file with no SHA-256 (page):"; echo "$o"; return 1; }
+}
+check "a file listed with no SHA-256 is not installed, and a neighbour's SHA-256 is never used" t_nodigest
 
 [ "$FAILS" -eq 0 ] || { echo "$FAILS check(s) failed"; exit 1; }
 echo "all market-lookup checks passed"

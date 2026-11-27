@@ -88,6 +88,10 @@ emu_libs_check() {
   die "The emulator needs system libraries this computer does not have: $(printf '%s' "$missing" | awk '{print $1}' | tr '\n' ' '). Install the packages that provide them with your package manager, then run this again"
 }
 
+# host_tools_stale: this run will replace the platform-tools (ops #1319). takwerx stops Android first.
+host_tools_stale() { tool_needs adb "$PLATFORM_TOOLS_DIR" "$PLATFORM_TOOLS_LINUX_VERSION" 2>/dev/null; }
+lima_stale() { return 1; }
+
 # Google's platform-tools (adb) at the pinned version, verified before they are unpacked.
 host_tools_install() {
   local zip tmp

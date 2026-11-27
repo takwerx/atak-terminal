@@ -66,6 +66,14 @@ function Invoke-Init([string[]]$a) {
     }
     Test-HostWindows
     Test-EmuHost
+    # Tools are never replaced under a running Android (ops #1319): Windows cannot delete the
+    # files of a running emulator. Stopped first; started again after.
+    $toolsStopped = $false
+    if ((Test-EmuRunning) -and (Test-EmuToolsStale)) {
+        Step 'Stopping Android before its tools are replaced; it starts again after the update'
+        Stop-Emu
+        $toolsStopped = $true
+    }
     Install-EmuSdk
     Set-TakwerxPath
     Build-App
@@ -73,7 +81,9 @@ function Invoke-Init([string[]]$a) {
         Ok 'Installed'
         # After `takwerx update`: an Android brought up by an older takwerx is restarted, so
         # everything running is the new version. A clean power-off; ATAK and its data return.
-        if ((Test-EmuRunning) -and (((Get-RunningVersion) -ne $TakwerxVersion) -or -not (Test-AvdImageCurrent))) {
+        if ($toolsStopped) {
+            Invoke-Up
+        } elseif ((Test-EmuRunning) -and (((Get-RunningVersion) -ne $TakwerxVersion) -or -not (Test-AvdImageCurrent))) {
             Step "Restarting Android under takwerx $TakwerxVersion (about a minute; ATAK and its data come back)"
             Stop-Emu
             Invoke-Up

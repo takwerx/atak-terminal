@@ -130,6 +130,13 @@ function Get-Pinned([string]$url, [string]$name, [string]$sha256, [string[]]$see
     return $dest
 }
 
+# This run will replace the emulator, the system image or the platform tools (ops #1319). Windows
+# cannot delete the files of a running emulator, so init stops Android first and starts it after.
+function Test-EmuToolsStale {
+    # The same rule as the installs (Test-ToolNeeds, ops #1318): a tool newer than the pin stays, so it does not stop Android.
+    return (Test-ToolNeeds (Get-ToolVersion $EmuDir) $V.EMULATOR_VERSION) -or (Test-ToolNeeds (Get-ToolVersion $SysImgDir) $V.SYSIMG_REV) -or (Test-ToolNeeds (Get-ToolVersion $PtDir) $V.PLATFORM_TOOLS_WIN_VERSION)
+}
+
 function Install-EmuSdk {
     $measure = Join-Path $env:LOCALAPPDATA 'takwerx-accel'
     if (Test-ToolStale 'emulator' $EmuDir $V.EMULATOR_VERSION) {
