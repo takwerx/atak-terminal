@@ -15,6 +15,7 @@ name: PR checks
 #   bash .github/ci/test_init_runtime.sh  (init --runtime redroid looks for Android on the redroid endpoint; ops #861)
 #   bash .github/ci/test_market_lookup.sh (the Market plugin is found when GitHub's API is rate-limited; ops #1274)
 #   bash .github/ci/test_downgrade_guard.sh   (install line, update, tools and the Android device never go backwards; ops #1318)
+#   bash .github/ci/test_update_edges.sh   (no raw error on a fresh install, update waits for the emulator to stop, no file picker mid-update, Linux emulator survives a closed terminal; ops #1411)
 #   pwsh -File .github/ci/test_windows_guard.ps1   (the same rules for the Windows engine; ops #1318)
 on:
   pull_request:
@@ -205,10 +206,21 @@ jobs:
           persist-credentials: false
       - run: python3 -I .github/ci/test_push_checks.py
 
+  # Rough edges from the 0.2.16 T&E: the fresh install prints no raw error, `takwerx update` never opens the APK picker while Android
+  # is still stopping, and the Linux emulator survives the terminal that started it closing (ops #1411).
+  update-edges:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - run: bash .github/ci/test_update_edges.sh
+
   # One stable name to require in branch protection. A failed or cancelled job fails it.
   checks-ok:
     if: always()
-    needs: [static, powershell, linux-host, release-hygiene, release-gate, release-assets-test, lima-pin, init-runtime, market-lookup, downgrade-guard, android-image, update-safety, workflow-pins, push-checks]
+    needs: [static, powershell, linux-host, release-hygiene, release-gate, release-assets-test, lima-pin, init-runtime, market-lookup, downgrade-guard, android-image, update-safety, workflow-pins, push-checks, update-edges]
     runs-on: ubuntu-24.04
     steps:
       - env:
