@@ -10,6 +10,7 @@ $script:FromApp = ($args -contains '--from-app')
 $argv = @($args | Where-Object { $_ -ne '--from-app' })
 
 . (Join-Path $App 'lib\windows\guard.ps1')
+. (Join-Path $App 'lib\windows\timed.ps1')
 . (Join-Path $App 'lib\windows\common.ps1')
 . (Join-Path $App 'lib\windows\host.ps1')
 . (Join-Path $App 'lib\windows\android.ps1')
