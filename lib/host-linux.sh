@@ -91,7 +91,7 @@ emu_libs_check() {
 # Google's platform-tools (adb) at the pinned version, verified before they are unpacked.
 host_tools_install() {
   local zip tmp
-  if [ "$(tool_version "$PLATFORM_TOOLS_DIR")" != "$PLATFORM_TOOLS_LINUX_VERSION" ]; then
+  if tool_needs adb "$PLATFORM_TOOLS_DIR" "$PLATFORM_TOOLS_LINUX_VERSION"; then
     zip="$TAKWERX_CACHE/platform-tools_r$PLATFORM_TOOLS_LINUX_VERSION-linux.zip"
     download "https://dl.google.com/android/repository/platform-tools_r$PLATFORM_TOOLS_LINUX_VERSION-linux.zip" "$zip" "$PLATFORM_TOOLS_LINUX_SHA256"
     tmp=$(mktemp -d "$TAKWERX_CACHE/unpack.XXXXXX")
@@ -100,7 +100,7 @@ host_tools_install() {
     mv "$tmp/platform-tools" "$PLATFORM_TOOLS_DIR"; rm -rf "$tmp"
     printf '%s\n' "$PLATFORM_TOOLS_LINUX_VERSION" >"$PLATFORM_TOOLS_DIR/.version"
   fi
-  ok "adb (platform-tools $PLATFORM_TOOLS_LINUX_VERSION)"
+  ok "adb (platform-tools $(tool_version "$PLATFORM_TOOLS_DIR"))"
 }
 
 # Puts `takwerx` on the PATH for new terminals. The launcher entry uses the same command.

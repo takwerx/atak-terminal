@@ -10,9 +10,10 @@
 # a real install, checks what a user does:
 #   1. fresh install: the candidate unpacks the way install.sh does, `takwerx version` and
 #      `takwerx help` run, and the pinned Lima and scrcpy download and match their SHA-256.
-#   2. update: the previous release is installed, then replaced by the candidate the way
-#      `takwerx update` swaps the app, its pinned tools are brought up to the candidate's
-#      pins, and the previous release's saved settings are still read.
+#   2. update: the previous release (and v0.2.0, and the oldest release) is installed, then replaced by the
+#      candidate the way `takwerx update` swaps the app, its pinned tools are brought up to the
+#      candidate's pins, and the saved settings are still read.
+#   3. the candidate refuses a lower takwerx version than the one installed.
 # On success it writes reports/smoke-X.Y.Z.pass. release.sh refuses to run without that file
 # for this commit. There is no way around it: a failed smoke is fixed, not skipped.
 #
@@ -79,34 +80,60 @@ if [ "$quick" = 0 ]; then
   pass "pinned Lima and scrcpy download and match their SHA-256"
 fi
 
-echo "== 2. update from the previous release"
-prev=$(git for-each-ref --format='%(refname:strip=2)' 'refs/tags/v[0-9]*' | sort -V | tail -n1)
-if [ -z "$prev" ]; then
+echo "== 2. update from the previous release, and from older ones"
+# Not only the last release: customers sit on old versions (ops #1318). The newest release gets the
+# full treatment (its tools are installed and brought to the candidate's pins); v0.2.0 and the oldest
+# release (v0.1.1) are the old clients that fetch heads/main of takwerx-desktop through the repository rename, and their
+# update code runs BEFORE the swap, so a guard in the candidate cannot protect them (release notes say
+# so). Each is installed, swapped for the candidate the way `takwerx update` swaps, and must still
+# run and keep its settings.
+prevs=$(git for-each-ref --format='%(refname:strip=2)' 'refs/tags/v[0-9]*' | sort -V | tail -n1)
+oldest=$(git for-each-ref --format='%(refname:strip=2)' 'refs/tags/v[0-9]*' | sort -V | head -n1)
+for old in v0.2.0 $oldest; do
+  if git rev-parse -q --verify "refs/tags/$old" >/dev/null && ! printf '%s\n' "$prevs" | grep -qx "$old"; then prevs="$prevs"$'\n'"$old"; fi
+done
+if [ -z "$prevs" ]; then
   pass "no earlier release to update from (first release)"
-else
-  R2="$S/update/.takwerx"; mkdir -p "$R2/app"
+fi
+n=0
+for prev in $prevs; do
+  n=$((n + 1))
+  R2="$S/update$n/.takwerx"; mkdir -p "$R2/app"
   git archive "$prev" | tar -x -C "$R2/app"
   if [ "$(uname -s)" = Linux ] && [ ! -f "$R2/app/lib/host-linux.sh" ]; then
     pass "$prev has no Linux host, update step skipped on this computer"
-  else
-    pv=$(tr -d '[:space:]' <"$R2/app/VERSION")
-    [ "$(engine "$R2/app" "$R2" version)" = "$pv" ] || die "the previous release ($prev) does not run"
-    pass "previous release $prev runs"
-    [ "$quick" = 1 ] || { tools_install "$R2/app" "$R2" || die "the previous release's tools did not install"; }
-    setting "$R2/app" "$R2" SMOKE_KEEP ok
-    # takwerx update's swap: the new tree replaces app/, state next to it stays.
-    cp -R "$R1/app" "$R2/app.new"
-    rm -rf "$R2/app.old"; mv "$R2/app" "$R2/app.old"; mv "$R2/app.new" "$R2/app"; rm -rf "$R2/app.old"
-    [ "$(engine "$R2/app" "$R2" version)" = "$v" ] || die "after the update 'takwerx version' is not $v"
-    pass "after the update takwerx is $v"
-    [ "$(setting "$R2/app" "$R2" SMOKE_KEEP)" = ok ] || die "the saved settings from $prev are lost after the update"
-    pass "settings saved by $prev survive the update"
-    if [ "$quick" = 0 ]; then
-      tools_install "$R2/app" "$R2" || die "the candidate could not bring the tools to its pins"
-      pass "tools are at the candidate's pins after the update"
-    fi
+    continue
   fi
-fi
+  pv=$(tr -d '[:space:]' <"$R2/app/VERSION")
+  [ "$(engine "$R2/app" "$R2" version)" = "$pv" ] || die "the earlier release ($prev) does not run"
+  pass "earlier release $prev runs"
+  if [ "$quick" = 0 ] && [ "$n" = 1 ]; then tools_install "$R2/app" "$R2" || die "the previous release's tools did not install"; fi
+  setting "$R2/app" "$R2" SMOKE_KEEP ok
+  # takwerx update's swap: the new tree replaces app/, state next to it stays.
+  cp -R "$R1/app" "$R2/app.new"
+  rm -rf "$R2/app.old"; mv "$R2/app" "$R2/app.old"; mv "$R2/app.new" "$R2/app"; rm -rf "$R2/app.old"
+  [ "$(engine "$R2/app" "$R2" version)" = "$v" ] || die "after the update from $prev 'takwerx version' is not $v"
+  pass "after the update from $prev takwerx is $v"
+  [ "$(setting "$R2/app" "$R2" SMOKE_KEEP)" = ok ] || die "the saved settings from $prev are lost after the update"
+  pass "settings saved by $prev survive the update"
+  if [ "$quick" = 0 ] && [ "$n" = 1 ]; then
+    tools_install "$R2/app" "$R2" || die "the candidate could not bring the tools to its pins"
+    pass "tools are at the candidate's pins after the update"
+  fi
+done
+
+echo "== 3. the candidate never goes backwards"
+# What the candidate does once it is the installed copy: a lower version from GitHub is refused.
+# (.github/ci/test_downgrade_guard.sh runs the whole install line and update against a fake GitHub.)
+(
+  export HOME="$S/home" TAKWERX_ROOT="$R1" TAKWERX_APP="$R1/app"
+  # shellcheck disable=SC1091
+  . "$R1/app/lib/common.sh"
+  semver_ok "$v" && ! semver_ok '<html>login</html>' && ! semver_ok '0.2' || exit 1
+  takwerx_downgrade_refused 0.0.1 >/dev/null || exit 1
+  ! takwerx_downgrade_refused "$v" >/dev/null || exit 1
+) || die "the candidate would accept a lower takwerx version"
+pass "the candidate refuses a lower takwerx version and a made-up one"
 
 if [ "$quick" = 1 ]; then
   echo "Quick smoke passed (no downloads). release.sh does not accept it; run without --quick."

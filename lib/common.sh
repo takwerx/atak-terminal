@@ -173,17 +173,65 @@ atak_ask_pick() {
   esac
 }
 
+# Never go backwards (ops #1318). takwerx keeps the highest version it has run in
+# $TAKWERX_STATE/highest (lines NAME=VALUE: takwerx, android_api), and refuses to move to a
+# lower one unless TAKWERX_ALLOW_DOWNGRADE=1. A release version is exactly X.Y.Z; anything
+# else that GitHub answers with (a captive-portal page, an error page) is not a version.
+semver_ok() { [[ ${1:-} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+# ver_lt A B: A is older than B. Only for values that look like versions.
+ver_lt() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]; }
+seen_get() { sed -n "s/^$1=//p" "$TAKWERX_STATE/highest" 2>/dev/null | tail -n1; }
+# seen_note NAME VALUE [force]: raises the record; a lower value never replaces a higher one,
+# unless force (a downgrade the person asked for).
+seen_note() {
+  local name=$1 val=$2 force=${3:-} have f="$TAKWERX_STATE/highest"
+  [[ $name =~ ^[a-z_]+$ ]] && [[ $val =~ ^[0-9][0-9A-Za-z._-]*$ ]] || return 0
+  have=$(seen_get "$name")
+  if [ -n "$have" ] && [ "$force" != force ] && ! ver_lt "$have" "$val"; then return 0; fi
+  mkdir -p "$TAKWERX_STATE"
+  { grep -v "^$name=" "$f" 2>/dev/null || true; printf '%s=%s\n' "$name" "$val"; } >"$f.tmp" && mv "$f.tmp" "$f"
+}
+# takwerx_downgrade_refused CANDIDATE: prints why and returns 0 when CANDIDATE is older than
+# the takwerx that is installed or the highest one that has run here. Returns 1 when it is fine.
+takwerx_downgrade_refused() {
+  local cand=$1 have
+  [ "${TAKWERX_ALLOW_DOWNGRADE:-0}" = 1 ] && return 1
+  semver_ok "$cand" || return 1
+  for have in "$(tr -d '[:space:]' <"$TAKWERX_APP/VERSION" 2>/dev/null || true)" "$(seen_get takwerx)"; do
+    have=${have%%-*}
+    semver_ok "$have" || continue
+    if ver_lt "$cand" "$have"; then
+      printf 'takwerx %s is older than the takwerx you have (%s), so it was not installed. Nothing changed. To go back on purpose: TAKWERX_ALLOW_DOWNGRADE=1 takwerx update' "$cand" "$have"
+      return 0
+    fi
+  done
+  return 1
+}
+# tool_needs NAME DIR PIN: 0 when DIR must be (re)installed to PIN: nothing there, or an older
+# version. A tool NEWER than the pin stays: a newer Lima or emulator was put there by a newer
+# takwerx or by the person, and this takwerx has no business replacing it with an older build.
+tool_needs() {
+  local name=$1 have pin=$3
+  have=$(tool_version "$2")
+  [ "$have" != "$pin" ] || return 1
+  if [[ $have =~ ^[0-9][0-9A-Za-z._-]*$ ]] && ver_lt "$pin" "$have"; then
+    warn "$name $have is newer than the $pin this takwerx pins; keeping $have"
+    return 1
+  fi
+  return 0
+}
+
 # Where takwerx comes from. Releases: the VERSION file on main names the newest one and
 # the tag v<VERSION> holds it, so a push to main between releases reaches nobody until
 # release.sh runs (DECISIONS 2026-09-27). TAKWERX_BRANCH=<branch> takes a development
-# branch instead. Prints "URL<space>description", or fails.
+# branch instead. Prints "URL<space>description", or fails. The version must be X.Y.Z.
 takwerx_source() {
   local repo=${TAKWERX_REPO:-takwerx/atak-terminal} ver
   if [ -n "${TAKWERX_BRANCH:-}" ]; then
     printf 'https://github.com/%s/archive/refs/heads/%s.tar.gz branch %s\n' "$repo" "$TAKWERX_BRANCH" "$TAKWERX_BRANCH"; return 0
   fi
   ver=$(curl -fsSL --max-time 10 "https://raw.githubusercontent.com/$repo/main/VERSION" 2>/dev/null | tr -d '[:space:]') || return 1
-  [ -n "$ver" ] || return 1
+  semver_ok "$ver" || return 1
   printf 'https://github.com/%s/archive/refs/tags/v%s.tar.gz release %s\n' "$repo" "$ver" "$ver"
 }
 
@@ -196,10 +244,12 @@ update_check() {
   mkdir -p "$TAKWERX_STATE"
   if [ ! -f "$stamp" ] || [ -z "$(find "$stamp" -mtime -1 2>/dev/null)" ]; then
     latest=$(curl -fsSL --max-time 3 "https://raw.githubusercontent.com/$repo/main/VERSION" 2>/dev/null | tr -d '[:space:]') || latest=""
+    semver_ok "$latest" || latest=""
     printf '%s\n' "$latest" >"$stamp"; fresh=1
   fi
   latest=$(tr -d '[:space:]' <"$stamp" 2>/dev/null || true)
-  [ -n "$latest" ] && [ "$latest" != "$TAKWERX_VERSION" ] || return 0
+  semver_ok "$latest" || return 0
+  [ "$latest" != "$TAKWERX_VERSION" ] || return 0
   [ "$(printf '%s\n%s\n' "$TAKWERX_VERSION" "$latest" | sort -V | tail -n1)" = "$latest" ] || return 0
   [ "$fresh" = 1 ] && log "update available: $latest"
   case "$mode" in
