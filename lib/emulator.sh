@@ -915,7 +915,9 @@ emu_stop() {
   local i
   for i in $(seq 1 45); do emu_running || return 0; sleep 1; done
   warn "Android did not power off within 45 seconds; stopping the emulator"
-  "$ADB" -s "$ADB_ENDPOINT" emu kill >/dev/null 2>&1 || kill "$(emu_pid)" 2>/dev/null || true
+  # A frozen emulator process never answers `emu kill`, and adb has no time limit of its own:
+  # update and restart waited for ever (ops #1423). After 10 s it is SIGTERM, then SIGKILL below.
+  with_timeout "${EMU_KILL_TIMEOUT:-10}" "$ADB" -s "$ADB_ENDPOINT" emu kill >/dev/null 2>&1 || kill "$(emu_pid)" 2>/dev/null || true
   # Return only when the process is gone. The forced stop takes a few seconds, and a caller
   # that asks emu_running straight after (init_emulator, on `takwerx update`) saw a running
   # emulator with no ATAK and opened the APK file picker mid-update (ops #1411).
