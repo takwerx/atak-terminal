@@ -646,9 +646,13 @@ emu_start_linux() {
   [ "$gpu" = host ] || warn "No graphics device was found, so the processor draws Android; it will be slow. $( [ -z "$(config_get EMU_GPU "")" ] || echo "(EMU_GPU=$gpu in the config)")"
   step "Starting Android ($EMU_AVD, $(emu_geometry | awk '{print $1"x"$2" at "$3" dpi"}'), graphics: $gpu${win:+, no window})"
   log "emulator start: $(tool_version "$EMU_DIR"), gpu $gpu, features $feats${EMU_FEATURES:+,$EMU_FEATURES}${EMU_ARGS:+, args $EMU_ARGS}"
+  # Its own session (setsid): QEMU treats SIGHUP as a power-off request and installs its own
+  # handler, so nohup does not protect it, and closing the terminal that ran `takwerx init`
+  # shut Android down (ops #1411). Without a controlling terminal there is no hangup to get.
+  local own=(); command -v setsid >/dev/null 2>&1 && own=(setsid)
   # shellcheck disable=SC2086  # EMU_ARGS is a list of arguments
   ANDROID_SDK_ROOT="$EMU_SDK" ANDROID_HOME="$EMU_SDK" ANDROID_AVD_HOME="$EMU_AVD_HOME" \
-    nohup "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu "$gpu" "${win[@]}" \
+    nohup "${own[@]}" "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu "$gpu" "${win[@]}" \
       -feature "$feats${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim -accel on $EMU_ARGS \
       >>"$EMU_LOG" 2>&1 </dev/null &
   disown 2>/dev/null || true
@@ -912,6 +916,13 @@ emu_stop() {
   for i in $(seq 1 45); do emu_running || return 0; sleep 1; done
   warn "Android did not power off within 45 seconds; stopping the emulator"
   "$ADB" -s "$ADB_ENDPOINT" emu kill >/dev/null 2>&1 || kill "$(emu_pid)" 2>/dev/null || true
+  # Return only when the process is gone. The forced stop takes a few seconds, and a caller
+  # that asks emu_running straight after (init_emulator, on `takwerx update`) saw a running
+  # emulator with no ATAK and opened the APK file picker mid-update (ops #1411).
+  for i in $(seq 1 15); do emu_running || return 0; sleep 1; done
+  kill -9 "$(emu_pid)" 2>/dev/null || true
+  for i in $(seq 1 5); do emu_running || return 0; sleep 1; done
+  return 0
 }
 
 # ATAK sets shouldLoad-<package>=false on every plugin (re)install and asks in its Plugins
