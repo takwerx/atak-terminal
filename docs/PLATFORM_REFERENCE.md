@@ -120,6 +120,52 @@ moves.
   Validate the rendered instance file, not the template (`@CPUS@` placeholders make the
   template fail `limactl validate`).
 
+## Update and state safety (audit of 0.2.15, ops #1319)
+
+What an update meets on a machine that already has Android, and what takwerx does. "Tested" means
+the real takwerx functions ran with the VM, the network or the machine's tools replaced by logging
+stubs (`.github/ci/test_android_image.sh`, `test_update_safety.sh`, `test_market_lookup.sh`), on the
+Studio (macOS, Apple Silicon, bash 3.2) and in an Ubuntu 24.04 container (bash 5). No real Lima VM,
+Windows PC or Intel Mac ran these paths.
+
+- **Which image wrote the data (redroid).** The `takwerx-data` volume outlasts the container. Every
+  container now carries the label `takwerx_image=<REDROID_IMAGE pin>`; a container made from another
+  pin is replaced on the next start and the volume stays; config `DATA_IMAGE` names the pin that last
+  made a container; a pin older than `DATA_IMAGE` (by the date in the tag, `...-240527`) is refused with
+  the way out (`takwerx update`, or `takwerx reset`). A floating tag (`-latest`) has no date and is never
+  judged older. A `DATA_IMAGE` for a volume that is gone is dropped. ✅ tested 2026-11-26. Docker prints
+  `<no value>` for a missing label with `{{.Config.Labels.takwerx_image}}` and the value for a set one
+  ✅ 2026-11-26 on the Studio's Docker; podman uses the same Go template ❓ not run on a real podman, so
+  `container_image` treats an empty answer and `<no value>` alike and falls back to `{{.ImageName}}`.
+  Today the old and new pin are the same image, so no install changes.
+- **Tools are never replaced under a running Android.** `takwerx init` and `takwerx update` stop a
+  running Android (a clean stop, ATAK saves) before they replace the emulator, the system image,
+  MoltenVK, scrcpy, Lima or the Linux and Windows platform tools, and start it again after. When Lima
+  changes the VM stops too. A tool NEWER than its pin is kept (ops #1318, `tool_needs`), so it does not
+  stop Android either: the stale checks use the same rule as the installs. ✅ order and the newer-tool
+  case tested 2026-11-26 (Mac and Linux code); the Windows twin
+  (`Test-EmuToolsStale`, `Invoke-Init`) ❓ is only parsed in CI, not run on a PC.
+- **The Market plugin is verified.** GitHub gives every release asset a SHA-256 (`digest` in the API,
+  `sha256:` on the `expanded_assets` page, ✅ read 2026-11-26 for takwerx-market v1.8). The download
+  refuses and deletes a file that does not match it, and a file listed with no SHA-256 is not
+  installed. This proves the file is the one GitHub lists, not who published it. It is still
+  installed with `-g`. An older APK over a newer one fails with a warning (safe) ❓ read from code, not run.
+- **Cache.** A failed unzip removes its `cache/unpack.*` folder (1 to 4 GB); every emulator step first
+  removes leftover `unpack.*` and `*.part`, and zips and tarballs of tools that are no longer pinned.
+  ✅ tested 2026-11-26.
+- **Intel Mac.** The emulator build is Apple Silicon's. `takwerx init --runtime emulator` and
+  `takwerx runtime emulator` refuse on an Intel Mac, and a saved `RUNTIME=emulator` that came over with
+  Migration Assistant reads as redroid. ✅ tested 2026-11-26 with a stubbed `uname`; no Intel Mac ran it.
+- **Read from code, not changed or run on a host:** downloads go to `*.part` and move into place only
+  after the SHA-256 matches (`download`, `Get-Download`; the refusal and the deleted file ✅ tested);
+  `config_set` writes a temp file and renames it; `update_check` never reports a version older than
+  the installed one (it compares with `sort -V`); a VM provisioned by an older takwerx keeps its
+  provisioning (it runs once, `/etc/takwerx-provisioned`; the template has not changed since 0.1.0).
+- **Still needs a real host** (not tested): Lima 2.2.x to 2.3.0 on an Intel Mac in bridged mode,
+  where `bridged_ready` only tests that the socket_vmnet and sudoers files exist; the VM base
+  `ubuntu-24.04` and the unpinned `apt-get install` in the provisioning script (safe today because it
+  runs once); a 0.1.x VM updated to 0.2.15 and later.
+
 ## How users receive takwerx
 
 - **Users receive tags, never the head of `main`.** `install.sh` and `takwerx update` read

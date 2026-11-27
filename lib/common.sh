@@ -277,7 +277,7 @@ pin_sha256() {
 # With SHA256, a cached DEST that does not match is fetched again, and a fresh download that
 # does not match is deleted and refused before anything uses it.
 download() {
-  local url=$1 dest=$2 sha=${3:-} have
+  local url=$1 dest=$2 sha=${3:-} from=${4:-versions.env pins} have
   if [ -s "$dest" ]; then
     if [ -z "$sha" ] || [ "$(sha256_of "$dest")" = "$sha" ]; then return 0; fi
     warn "$(basename "$dest") in the cache does not match its pinned SHA-256; downloading it again"
@@ -291,7 +291,7 @@ download() {
     have=$(sha256_of "$dest.part")
     if [ "$have" != "$sha" ]; then
       rm -f "$dest.part"
-      die "Refused $(basename "$dest"): its SHA-256 is $have, but versions.env pins $sha. The file is deleted and nothing was installed. Run the command again; if this repeats, the download is being altered on the way, so report it"
+      die "Refused $(basename "$dest"): its SHA-256 is $have, but $from $sha. The file is deleted and nothing was installed. Run the command again; if this repeats, the download is being altered on the way, so report it"
     fi
   fi
   mv "$dest.part" "$dest"

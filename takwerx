@@ -116,16 +116,27 @@ market_register_after_first_run() {
 # API first. The API gives 60 calls an hour per address with no token, and a shared address
 # (office, hotspot, VPN) runs out (ops #1274). Then it reads the same release from the github.com
 # pages, which that limit does not cover: /releases/latest redirects to the tag, and the tag's
-# expanded_assets page lists the APKs. Return codes: 0 found (URL on stdout), 1 the release has no
-# build for this ATAK, 2 GitHub is limiting requests from this address, 3 GitHub did not answer.
+# expanded_assets page lists the APKs. Both also give each file's SHA-256 (GitHub computes it at
+# upload), which `download` checks before anything installs it (ops #1319): the APK goes into ATAK
+# with -g, and a file that is not the one GitHub lists must never get that far.
+# Prints "URL SHA256". Return codes: 0 found, 1 the release has no build for this ATAK, 2 GitHub is
+# limiting requests from this address, 3 GitHub did not answer, 4 the file is listed with no SHA-256.
 market_asset_url() {
-  local ver=$1 repo=takwerx/takwerx-market body code tag page href url
+  local ver=$1 repo=takwerx/takwerx-market body code tag page href url sha
   body=$(mktemp "${TMPDIR:-/tmp}/takwerx-market.XXXXXX")
   code=$(curl -sSL --max-time 20 -o "$body" -w '%{http_code}' "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null) || code=000
   if [ "$code" = 200 ]; then
-    url=$(grep -oE '"browser_download_url": *"[^"]*--'"$ver"'-civ-release\.apk"' "$body" | sed 's/.*"\(http[^"]*\)"/\1/' | head -n1)
+    # The asset's "digest" comes just before its "browser_download_url"; one token per line keeps
+    # that order whether the JSON is pretty-printed or not.
+    url=$(grep -oE '"(digest|browser_download_url)": *"[^"]*"' "$body" | awk -v suf="--$ver-civ-release.apk\"" '
+      /^"digest"/ { d = $0; sub(/^"digest": *"/, "", d); sub(/"$/, "", d); sub(/^sha256:/, "", d); next }
+      /^"browser_download_url"/ { u = $0; sub(/^"browser_download_url": *"/, "", u)
+        if (substr(u, length(u) - length(suf) + 1) == suf) { sub(/"$/, "", u); print u, d; exit }
+        d = "" }')
     rm -f "$body"
     [ -n "$url" ] || return 1
+    sha=${url##* }
+    [[ $sha =~ ^[0-9a-f]{64}$ ]] || return 4
     printf '%s\n' "$url"; return 0
   fi
   local limited=0
@@ -136,8 +147,16 @@ market_asset_url() {
   tag=${tag##*/releases/tag/}
   if [ -n "$tag" ] && [[ $tag != *[!A-Za-z0-9._-]* ]]; then
     if page=$(curl -fsSL --max-time 20 "https://github.com/$repo/releases/expanded_assets/$tag" 2>/dev/null); then
-      href=$(printf '%s\n' "$page" | grep -oE 'href="[^"]*--'"$ver"'-civ-release\.apk"' | sed 's/^href="//; s/"$//' | head -n1 || true)
-      if [ -n "$href" ]; then printf 'https://github.com%s\n' "$href"; return 0; fi
+      # The asset's SHA-256 is the first one after its link and before the next asset's link.
+      href=$(printf '%s\n' "$page" | awk -v suf="--$ver-civ-release.apk\"" '
+        n = index($0, "href=\"") { if (h != "") exit; if (index($0, suf)) { h = substr($0, n + 6); sub(/".*/, "", h) } next }
+        h != "" && match($0, /sha256:[0-9a-f]+/) { print h, substr($0, RSTART + 7, RLENGTH - 7); done = 1; exit }
+        END { if (!done && h != "") print h }' || true)
+      if [ -n "$href" ]; then
+        sha=${href##* }
+        [[ $sha =~ ^[0-9a-f]{64}$ ]] || return 4
+        printf 'https://github.com%s\n' "$href"; return 0
+      fi
       return 1   # the page answered, so GitHub is reachable: only this ATAK has no build
     fi
   fi
@@ -146,7 +165,7 @@ market_asset_url() {
 }
 
 market_install() {
-  local ver url apk rc=0
+  local ver url sha apk rc=0
   ver=$(atak_version | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)
   if [ -z "$ver" ]; then warn "ATAK is not installed; Market is installed after ATAK"; return 0; fi
   step "TAKWERX Market plugin for ATAK $ver"
@@ -155,10 +174,12 @@ market_install() {
     0) ;;
     1) warn "No Market build for ATAK $ver in the latest release"; return 0 ;;
     2) warn "GitHub is limiting requests from your address; run 'takwerx market' again in an hour"; return 0 ;;
+    4) warn "GitHub lists no SHA-256 for the Market plugin, so it cannot be checked and was not installed"; return 0 ;;
     *) warn "Could not reach GitHub; run 'takwerx market' when online"; return 0 ;;
   esac
+  sha=${url##* }; url=${url% *}
   apk="$TAKWERX_CACHE/$(basename "$url")"
-  download "$url" "$apk"
+  download "$url" "$apk" "$sha" "GitHub lists"
   "$ADB" -s "$ADB_ENDPOINT" install -r -g "$apk" >/dev/null || { warn "Market install failed"; return 0; }
   config_set MARKET_APK "$apk"
   ok "Market $(basename "$apk" | sed -nE 's/.*Market-([0-9.]+)--.*/\1/p') installed"
@@ -182,6 +203,10 @@ cmd_init() {
     if [ "${TAKWERX_ALLOW_DOWNGRADE:-0}" = 1 ]; then seen_note takwerx "$TAKWERX_VERSION" force; else seen_note takwerx "$TAKWERX_VERSION"; fi
   fi
   host_check
+  case "$rt" in
+    emulator) runtime_supported emulator || die "The GPU emulator needs an Apple Silicon Mac; this Mac is $HOST_ARCH. Use: takwerx init --runtime redroid" ;;
+  esac
+  tools_swap_guard
   host_tools_install
   path_setup
   case "$rt" in
@@ -200,6 +225,7 @@ cmd_init() {
   if vm_exists; then vm_start; else vm_create; vm_start; fi
   vm_run "test -e /dev/binderfs/binder" || die "binder is missing inside the VM; see takwerx vm-shell and /var/log/cloud-init-output.log"
   ok "binder available in the VM"
+  redroid_data_check
   image_present || image_pull
   app_build
   container_start
@@ -243,7 +269,7 @@ init_ask_apk() {
   atak_pick
 }
 init_emulator() {
-  local apk=$1 open=$2 a restarted=0
+  local apk=$1 open=$2 a restarted=$TOOLS_STOPPED
   emu_disk_check
   emu_sdk_install
   if [ "$HOST_OS" = linux ]; then emu_libs_check; fi
@@ -572,6 +598,7 @@ cmd_runtime() {
     "") printf 'Runtime: %s\n' "$(runtime)" ;;
     redroid|emulator)
       [ "$HOST_OS" = linux ] && [ "$1" = redroid ] && die "Linux runs the emulator runtime only"
+      runtime_supported "$1" || die "The GPU emulator needs an Apple Silicon Mac; this Mac is $HOST_ARCH. Stay on redroid"
       [ "$(runtime)" = "$1" ] && { ok "Runtime is already $1"; return 0; }
       say "Stopping the current runtime first"
       cmd_down

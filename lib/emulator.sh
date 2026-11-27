@@ -66,7 +66,14 @@ EMU_KK_LIB=/opt/homebrew/opt/mesa/lib/libvulkan_kosmickrisp.dylib
 EMU_WINDOW_LIB="$TAKWERX_APP/helpers/emuwindow/libtakwerx-window.dylib"
 ANDROID_SDK_TERMS=https://developer.android.com/studio/terms
 
-runtime() { config_get RUNTIME "$RUNTIME_DEFAULT"; }
+# The emulator build here is Apple Silicon's (arm64) on a Mac; an Intel Mac has no emulator
+# runtime (ops #1319). A saved RUNTIME=emulator that reached an Intel Mac (Migration Assistant
+# copies the home folder) is read as redroid, never as an arm64 emulator that cannot run.
+runtime_supported() { [ "$1" != emulator ] || [ "$HOST_OS" != macos ] || [ "$HOST_ARCH" = arm64 ]; }
+runtime() {
+  local rt; rt=$(config_get RUNTIME "$RUNTIME_DEFAULT")
+  if runtime_supported "$rt"; then printf '%s' "$rt"; else printf 'redroid'; fi
+}
 
 # The emulator registers with the adb server named by ANDROID_ADB_SERVER_PORT when it
 # starts, which common.sh points at takwerx's private server, so it appears there by serial.
@@ -111,17 +118,55 @@ emu_disk_check() {
   ok "Disk: $((free / 10)) GB free"
 }
 
+# emu_tools_stale: this run will replace the emulator, the system image or MoltenVK
+# (ops #1319). They are never replaced under a running Android: Windows cannot delete a running
+# emulator's files, and on Linux the emulator runs from the folder that is replaced. takwerx stops
+# Android first (init's tools_swap_guard) and starts it again after.
+emu_tools_stale() {
+  # The same rule as the installs below (tool_needs, ops #1318): a tool newer than the pin stays,
+  # so it must not stop Android either.
+  tool_needs emulator "$EMU_SDK/emulator" "$EMULATOR_VERSION" 2>/dev/null && return 0
+  tool_needs "Android image" "$EMU_SYSIMG_DIR" "$SYSIMG_REV" 2>/dev/null && return 0
+  [ "$HOST_OS" = linux ] && return 1
+  tool_needs MoltenVK "$EMU_MVK_DIR" "$MOLTENVK_VERSION" 2>/dev/null
+}
+
+# unpack_zip ZIP: unzips into a new folder under the cache and prints it. A failed unzip
+# removes the folder: a 1 to 4 GB cache/unpack.* folder used to stay behind (ops #1319).
+unpack_zip() {
+  local tmp
+  tmp=$(mktemp -d "$TAKWERX_CACHE/unpack.XXXXXX") || die "Could not make a folder in $TAKWERX_CACHE"
+  if ! unzip -q -o "$1" -d "$tmp"; then rm -rf "$tmp"; die "Could not unpack $(basename "$1")"; fi
+  printf '%s\n' "$tmp"
+}
+
+# cache_prune: removes what an interrupted run left in the cache (unpack.* folders, .part
+# downloads) and the zips of tools that are no longer pinned. Pinned zips stay: they make a
+# repeat install, and a downgrade-and-back, work offline.
+cache_prune() {
+  local f keep
+  rm -rf "$TAKWERX_CACHE"/unpack.* "$TAKWERX_CACHE"/*.part 2>/dev/null || true
+  for f in "$TAKWERX_CACHE"/emulator-*.zip "$TAKWERX_CACHE"/*-[0-9]*_r[0-9]*.zip "$TAKWERX_CACHE"/MoltenVK-macos-*.tar; do
+    [ -e "$f" ] || continue
+    case "$(basename "$f")" in
+      "emulator-$EMU_ZIP_OS-$EMULATOR_BUILD.zip"|"$EMU_ABI-${SYSIMG_API}_r$SYSIMG_REV.zip"|"MoltenVK-macos-$MOLTENVK_VERSION.tar") keep=1 ;;
+      *) keep=0 ;;
+    esac
+    [ "$keep" = 1 ] || rm -f "$f"
+  done
+}
+
 # Emulator, system image and MoltenVK into ~/.takwerx/tools, each with a .version, each
 # re-fetched only when its pin changes and verified against its SHA-256 by download.
 emu_sdk_install() {
   local zip tmp
+  cache_prune
   if tool_needs emulator "$EMU_SDK/emulator" "$EMULATOR_VERSION"; then
     emu_license
     zip="$TAKWERX_CACHE/emulator-$EMU_ZIP_OS-$EMULATOR_BUILD.zip"
     download "https://dl.google.com/android/repository/emulator-$EMU_ZIP_OS-$EMULATOR_BUILD.zip" "$zip" "$EMU_ZIP_SHA"
     step "Unpacking the emulator $EMULATOR_VERSION"
-    tmp=$(mktemp -d "$TAKWERX_CACHE/unpack.XXXXXX")
-    unzip -q -o "$zip" -d "$tmp" || die "Could not unpack $(basename "$zip")"
+    tmp=$(unpack_zip "$zip") || exit 1
     rm -rf "$EMU_SDK/emulator"; mkdir -p "$EMU_SDK"; mv "$tmp/emulator" "$EMU_SDK/emulator"; rm -rf "$tmp"
     printf '%s\n' "$EMULATOR_VERSION" >"$EMU_SDK/emulator/.version"
     [ "$HOST_OS" = linux ] || rm -rf "$EMU_DIR"  # the Mac's private copy is rebuilt from this
@@ -132,8 +177,7 @@ emu_sdk_install() {
     zip="$TAKWERX_CACHE/$EMU_ABI-${SYSIMG_API}_r$SYSIMG_REV.zip"
     download "https://dl.google.com/android/repository/sys-img/$SYSIMG_TAG/$EMU_ABI-${SYSIMG_API}_r$SYSIMG_REV.zip" "$zip" "$SYSIMG_ZIP_SHA"
     step "Unpacking Android $SYSIMG_API"
-    tmp=$(mktemp -d "$TAKWERX_CACHE/unpack.XXXXXX")
-    unzip -q -o "$zip" -d "$tmp" || die "Could not unpack $(basename "$zip")"
+    tmp=$(unpack_zip "$zip") || exit 1
     rm -rf "$EMU_SYSIMG_DIR"; mkdir -p "$(dirname "$EMU_SYSIMG_DIR")"; mv "$tmp/$EMU_ABI" "$EMU_SYSIMG_DIR"; rm -rf "$tmp"
     printf '%s\n' "$SYSIMG_REV" >"$EMU_SYSIMG_DIR/.version"
   fi

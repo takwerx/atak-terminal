@@ -145,18 +145,24 @@ function Install-DataPackage([string]$zip) {
 # The latest Market release carries one APK per ATAK version; the one for the installed ATAK.
 # Find-MarketApk VER: the download URL of the Market APK for ATAK VER, or $null; $script:MarketWhy
 # says why not: 'nobuild' (the release has none for this ATAK), 'limited' (GitHub is limiting
-# requests from this address) or 'unreachable'. It asks GitHub's API first. The API gives 60 calls an
+# requests from this address), 'nosum' (GitHub lists the file with no SHA-256) or 'unreachable'.
+# $script:MarketSha is the file's SHA-256 as GitHub lists it (ops #1319): Get-Download checks it
+# before the APK is installed with -g. It asks GitHub's API first. The API gives 60 calls an
 # hour per address with no token, and a shared address runs out (ops #1274). Then it reads the same
 # release from the github.com pages, which that limit does not cover: /releases/latest redirects
 # to the tag, and the tag's expanded_assets page lists the APKs. Same steps as market_asset_url in takwerx.
 function Find-MarketApk([string]$ver) {
     $repo = 'takwerx/takwerx-market'
     $script:MarketWhy = 'unreachable'
+    $script:MarketSha = ''
     $limited = $false
     try {
         $rel = Invoke-RestMethod -UseBasicParsing -TimeoutSec 20 "https://api.github.com/repos/$repo/releases/latest"
         $asset = $rel.assets | Where-Object { $_.name -match ('--' + [regex]::Escape($ver) + '-civ-release\.apk$') } | Select-Object -First 1
-        if ($asset) { return $asset.browser_download_url }
+        if ($asset) {
+            if ("$($asset.digest)" -match '^sha256:([0-9a-f]{64})$') { $script:MarketSha = $Matches[1] } else { $script:MarketWhy = 'nosum'; return $null }
+            return $asset.browser_download_url
+        }
         $script:MarketWhy = 'nobuild'; return $null
     } catch {
         $code = 0
@@ -168,7 +174,12 @@ function Find-MarketApk([string]$ver) {
     if ($LASTEXITCODE -eq 0 -and $tag -match '/releases/tag/([A-Za-z0-9._-]+)$') {
         $page = (& curl.exe -fsSL --max-time 20 "https://github.com/$repo/releases/expanded_assets/$($Matches[1])" 2>$null) -join "`n"
         if ($LASTEXITCODE -eq 0) {
-            if ($page -match ('href="([^"]*--' + [regex]::Escape($ver) + '-civ-release\.apk)"')) { return 'https://github.com' + $Matches[1] }
+            # The file's SHA-256 is the first one after its link and before the next link.
+            if ($page -match ('(?s)href="([^"]*--' + [regex]::Escape($ver) + '-civ-release\.apk)"((?:(?!href=").)*)')) {
+                $href = $Matches[1]; $rest = $Matches[2]
+                if ($rest -match 'sha256:([0-9a-f]{64})') { $script:MarketSha = $Matches[1] } else { $script:MarketWhy = 'nosum'; return $null }
+                return 'https://github.com' + $href
+            }
             $script:MarketWhy = 'nobuild'; return $null
         }
     }
@@ -186,13 +197,14 @@ function Install-Market {
         switch ($script:MarketWhy) {
             'nobuild' { Warn "No Market build for ATAK $ver in the latest release" }
             'limited' { Warn "GitHub is limiting requests from your address; run 'takwerx market' again in an hour" }
+            'nosum'   { Warn 'GitHub lists no SHA-256 for the Market plugin, so it cannot be checked and was not installed' }
             default   { Warn "Could not reach GitHub; run 'takwerx market' when online" }
         }
         return
     }
     $name = $url.Substring($url.LastIndexOf('/') + 1)
     $apk = Join-Path $Cache $name
-    Get-Download $url $apk
+    Get-Download $url $apk $script:MarketSha 'GitHub lists'
     $r = Adb 'install' '-r' '-g' $apk
     if ($r -notmatch 'Success') { Warn "Market install failed: $r"; return }
     Set-Conf 'MARKET_APK' $apk

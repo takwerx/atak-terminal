@@ -71,6 +71,52 @@ image_pull() {
   vm_run "podman pull $REDROID_IMAGE" || die "Could not pull $REDROID_IMAGE"
 }
 
+# ---- which image wrote the data (ops #1319) -----------------------------------------------
+# The Android data lives in the takwerx-data volume and outlasts the container. A container
+# is reused with `podman start`, so a new REDROID_IMAGE pin never reached an existing install,
+# and nothing recorded which image had written the volume: a takwerx moved back to an older
+# pin would have booted older Android code on data a newer one had migrated.
+#   - every container carries the pin it was made from (label takwerx_image);
+#   - a container made from another pin is replaced; the volume stays;
+#   - config DATA_IMAGE names the pin that last made a container on the volume;
+#   - a pin older than DATA_IMAGE is refused, never run.
+# redroid_age IMAGE prints "ANDROID.BUILD" (14.0.0.240527) for a sortable tag such as
+# redroid:14.0.0_64only-240527[@sha256:...]; nothing for a tag with no dated build (latest).
+redroid_age() {
+  local tag=${1%%@*}
+  tag=${tag##*:}
+  [[ $tag =~ ^([0-9]+(\.[0-9]+)*)_[A-Za-z0-9]+-([0-9]{6})$ ]] || return 1
+  printf '%s.%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[3]}"
+}
+# redroid_older A B: A is a strictly older image than B. Unknown ages never count as older.
+redroid_older() {
+  local a b
+  a=$(redroid_age "$1") || return 1
+  b=$(redroid_age "$2") || return 1
+  [ "$a" != "$b" ] && [ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | head -n1)" = "$a" ]
+}
+# Stops before anything is created from an image older than the one that wrote the data.
+redroid_data_check() {
+  local have; have=$(config_get DATA_IMAGE)
+  [ -n "$have" ] || return 0
+  # A volume deleted from outside takwerx (limactl delete) leaves no data to protect.
+  vm_run "podman volume exists $VOLUME_NAME" 2>/dev/null || { config_unset DATA_IMAGE; return 0; }
+  if redroid_older "$REDROID_IMAGE" "$have"; then
+    die "The Android data was written by a newer Android image ($have). This takwerx pins an older one ($REDROID_IMAGE), and an older Android on newer data can corrupt it. Nothing was changed. Run 'takwerx update' to get the newer takwerx, or 'takwerx reset' to wipe Android's data and start clean"
+  fi
+}
+# The image the container was made from: its label, else (a container made before the label
+# existed) the image name podman recorded.
+container_image() {
+  local img
+  img=$(vm_run "podman inspect -f '{{.Config.Labels.takwerx_image}}' $CONTAINER_NAME 2>/dev/null" 2>/dev/null | tr -d '\r')
+  if [ -z "$img" ] || [ "$img" = "<no value>" ]; then
+    img=$(vm_run "podman inspect -f '{{.ImageName}}' $CONTAINER_NAME 2>/dev/null" 2>/dev/null | tr -d '\r')
+  fi
+  printf '%s' "$img"
+}
+container_image_current() { [ "$(container_image)" = "$REDROID_IMAGE" ]; }
+
 # Presets are "width height dpi". Layout room in dp is pixels * 160 / dpi, so lowering the
 # dpi buys toolbar space without rendering more pixels.
 display_geometry() {
@@ -154,6 +200,31 @@ adb_firewall() {
     || warn "Could not restrict adb to this Mac inside Android"
 }
 
+# Tools are never replaced under a running Android (ops #1319). Windows cannot delete the files
+# of a running emulator, on Linux the emulator runs from the folder that is replaced, and a
+# running VM keeps the Lima that started it. So when this run will replace a tool, Android is
+# stopped first (a clean stop: ATAK saves, the data stays). TOOLS_STOPPED=1 tells init to start
+# Android again afterwards.
+TOOLS_STOPPED=0
+# shellcheck disable=SC2034  # TOOLS_STOPPED is read by init_emulator in takwerx
+tools_swap_guard() {
+  TOOLS_STOPPED=0
+  if [ "$(runtime)" = emulator ]; then
+    emu_running || return 0
+    if host_tools_stale || emu_tools_stale; then
+      step "Stopping Android before its tools are replaced; it starts again after the update"
+      emu_stop; TOOLS_STOPPED=1
+    fi
+  else
+    vm_running || return 0
+    host_tools_stale || return 0
+    step "Stopping Android before its tools are replaced; it starts again after the update"
+    if container_running; then container_stop; fi
+    if lima_stale; then vm_stop; fi
+    TOOLS_STOPPED=1
+  fi
+}
+
 # ---- container lifecycle ------------------------------------------------------------------
 # The 64-bit-only image: Apple Silicon cannot execute 32-bit ARM code, so the regular image's
 # 32-bit zygote crash-loops and pins every CPU. use_memfd replaces ashmem, gone from kernels
@@ -173,7 +244,7 @@ container_create() {
   local cpus cpuset=''
   cpus=$(config_get VM_CPUS 2)
   if [ "$cpus" -ge 2 ]; then cpuset="--cpuset-cpus=1-$((cpus - 1))"; fi
-  common="--name $CONTAINER_NAME --privileged $cpuset --memory ${capmb}m -v $VOLUME_NAME:/data -v /dev/binderfs/binder:/dev/binder -v /dev/binderfs/hwbinder:/dev/hwbinder -v /dev/binderfs/vndbinder:/dev/vndbinder"
+  common="--name $CONTAINER_NAME --label takwerx_image=$REDROID_IMAGE --privileged $cpuset --memory ${capmb}m -v $VOLUME_NAME:/data -v /dev/binderfs/binder:/dev/binder -v /dev/binderfs/hwbinder:/dev/hwbinder -v /dev/binderfs/vndbinder:/dev/vndbinder"
   local fps; fps=$(config_get MAX_FPS 60)
   boot="androidboot.redroid_width=$w androidboot.redroid_height=$h androidboot.redroid_dpi=$dpi androidboot.redroid_gpu_mode=guest androidboot.redroid_fps=$fps androidboot.use_memfd=true"
   if [ "$mode" = bridged ]; then
@@ -227,26 +298,30 @@ binder_ready() {
 
 container_start() {
   local mode; mode=$(config_get NETWORK_MODE nat)
+  redroid_data_check
   if container_running; then
-    if [ "$(config_get CONTAINER_MODE nat)" = "$mode" ]; then return 0; fi
-    step "Network mode changed to $mode; recreating Android"
+    if [ "$(config_get CONTAINER_MODE nat)" = "$mode" ] && container_image_current; then return 0; fi
+    step "Network mode or Android image changed; recreating Android (the data stays)"
     container_stop
   fi
   binder_ready || die "binder is not available in the VM (takwerx doctor)"
   if container_exists; then
     # A bridged container gets a fresh network namespace on every start and so needs a fresh
-    # lease before Android boots; a container built for the other mode is stale. Recreate both.
-    if [ "$mode" = bridged ] || [ "$(config_get CONTAINER_MODE nat)" != "$mode" ]; then
+    # lease before Android boots; a container built for the other mode is stale; so is one
+    # built from another image pin (ops #1319). Recreate in each case.
+    if [ "$mode" = bridged ] || [ "$(config_get CONTAINER_MODE nat)" != "$mode" ] || ! container_image_current; then
       container_remove
-      container_create
+      container_make
     else
       step "Starting Android"
       vm_run "podman start $CONTAINER_NAME >/dev/null" || die "Could not start the Android container"
     fi
   else
-    container_create
+    container_make
   fi
 }
+# container_create dies when it cannot make a container, so DATA_IMAGE is written only after one exists.
+container_make() { container_create; config_set DATA_IMAGE "$REDROID_IMAGE"; }
 # ATAK takes no quit from outside. Its QUITAPP action is registered on AtakBroadcast, ATAK's
 # in-process bus (ATAKActivity.preLoadAssets), so `am broadcast` is delivered to nobody; that
 # is all this function did until 2026-09-27, and callers carried on as if ATAK had exited
@@ -283,7 +358,7 @@ container_stop() {
   lease_stop
 }
 container_remove() { lease_stop; vm_run "podman rm -f $CONTAINER_NAME >/dev/null 2>&1 || true"; }
-volume_remove()    { vm_run "podman volume rm -f $VOLUME_NAME >/dev/null 2>&1 || true"; }
+volume_remove()    { vm_run "podman volume rm -f $VOLUME_NAME >/dev/null 2>&1 || true"; config_unset DATA_IMAGE; }
 container_logs()   { vm_run "podman logs --tail ${1:-200} $CONTAINER_NAME"; }
 
 # scrcpy's HID keyboard needs /dev/uhid, which the container creates root-only. adb runs as the

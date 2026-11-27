@@ -1487,3 +1487,24 @@ a version lower than the newest tag. Same rules for Windows (`lib/windows/guard.
 Proof: `.github/ci/test_downgrade_guard.sh`, `.github/ci/test_windows_guard.ps1`.
 Not done: a way to prove an Android 36 device boots on 35 (it is refused instead), and nothing
 protects clients that already run 0.2.15 or older, whose update code runs before the swap.
+
+## 2026-11-26: updates meet old state (ops #1319, audit of 0.2.15)
+
+An audit of what `takwerx update` meets on a machine that already has Android found five gaps; all
+are closed in the code and each has a test. Where each is explained and what is still untested:
+`docs/PLATFORM_REFERENCE.md`, "Update and state safety".
+
+- The redroid container was reused with `podman start`, so a new `REDROID_IMAGE` pin never applied,
+  and nothing recorded which image wrote the data volume. Containers now carry the pin as a label and
+  are replaced when it differs; config `DATA_IMAGE` records the last image on the volume; an older pin
+  than the recorded one is refused. The record is a config key, so it needs no podman call to read.
+- Tools were replaced while Android ran. Init now stops Android first and starts it again after.
+- The Market APK came from `releases/latest` with no check. It is now checked against the SHA-256
+  GitHub lists for the file. A file with none is not installed (a release made before GitHub listed
+  checksums would be skipped, with a plain message; v1.8 has them).
+- A failed unzip left a multi-GB folder, and the cache was never pruned.
+- An Intel Mac could be given the arm64 emulator.
+
+The older-release gap this audit found first (`takwerx update` accepting an older release) is closed by
+ops #1318 above; the two fit: #1318 stops the app going back, this one stops the Android data
+being met by an older image.
