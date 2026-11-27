@@ -141,7 +141,9 @@ Windows PC or Intel Mac ran these paths.
 - **Tools are never replaced under a running Android.** `takwerx init` and `takwerx update` stop a
   running Android (a clean stop, ATAK saves) before they replace the emulator, the system image,
   MoltenVK, scrcpy, Lima or the Linux and Windows platform tools, and start it again after. When Lima
-  changes the VM stops too. ✅ order tested 2026-11-26 (Mac and Linux code); the Windows twin
+  changes the VM stops too. A tool NEWER than its pin is kept (ops #1318, `tool_needs`), so it does not
+  stop Android either: the stale checks use the same rule as the installs. ✅ order and the newer-tool
+  case tested 2026-11-26 (Mac and Linux code); the Windows twin
   (`Test-EmuToolsStale`, `Invoke-Init`) ❓ is only parsed in CI, not run on a PC.
 - **The Market plugin is verified.** GitHub gives every release asset a SHA-256 (`digest` in the API,
   `sha256:` on the `expanded_assets` page, ✅ read 2026-11-26 for takwerx-market v1.8). The download
