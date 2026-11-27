@@ -135,6 +135,21 @@ echo "== 3. the candidate never goes backwards"
 ) || die "the candidate would accept a lower takwerx version"
 pass "the candidate refuses a lower takwerx version and a made-up one"
 
+# An update meets a home with no state/highest (every install made by 0.2.15 or older): the version
+# record must go on, not end `takwerx init` silently (ops #1398). takwerx runs with set -euo pipefail.
+R3="$S/nostate/.takwerx"; mkdir -p "$R3"
+(
+  export HOME="$S/home" TAKWERX_ROOT="$R3" TAKWERX_APP="$R1/app"
+  # shellcheck disable=SC1091
+  . "$R1/app/lib/common.sh"
+  set -euo pipefail
+  [ ! -e "$TAKWERX_STATE/highest" ] || exit 1
+  [ -z "$(seen_get takwerx)" ] || exit 1
+  seen_note takwerx "$v"
+  [ "$(seen_get takwerx)" = "$v" ] || exit 1
+) || die "the candidate's version record stops when state/highest is missing"
+pass "the candidate's version record goes on with no state/highest and writes it"
+
 if [ "$quick" = 1 ]; then
   echo "Quick smoke passed (no downloads). release.sh does not accept it; run without --quick."
   exit 0
