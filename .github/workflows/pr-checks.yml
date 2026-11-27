@@ -14,6 +14,8 @@ name: PR checks
 #   bash .github/ci/test_lima_pin.sh      (Lima is 2.3.0 or newer and its pins match the release; ops #825)
 #   bash .github/ci/test_init_runtime.sh  (init --runtime redroid looks for Android on the redroid endpoint; ops #861)
 #   bash .github/ci/test_market_lookup.sh (the Market plugin is found when GitHub's API is rate-limited; ops #1274)
+#   bash .github/ci/test_downgrade_guard.sh   (install line, update, tools and the Android device never go backwards; ops #1318)
+#   pwsh -File .github/ci/test_windows_guard.ps1   (the same rules for the Windows engine; ops #1318)
 on:
   pull_request:
     branches: [dev, main]
@@ -63,6 +65,9 @@ jobs:
       # The GPU choice's pure functions, on the PC from atak-terminal #19 (ops #590).
       - shell: pwsh
         run: ./.github/ci/test_windows_gpu.ps1
+      # Never go backwards: the Windows engine's version, tool and Android device decisions (ops #1318).
+      - shell: pwsh
+        run: ./.github/ci/test_windows_guard.ps1
 
   # The Linux host: pins present, engine starts, GNU-userland helpers, launcher entry (ops #528).
   # Needs no KVM and downloads nothing.
@@ -147,6 +152,17 @@ jobs:
           persist-credentials: false
       - run: bash .github/ci/test_market_lookup.sh
 
+  # takwerx never moves to an older takwerx, tool or Android image (ops #1318, same trap as the Authentik redis crash
+  # loop, ops #1306): the install line and `takwerx update` against a fake GitHub, tool pins, the Android device, release.sh.
+  downgrade-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - run: bash .github/ci/test_downgrade_guard.sh
+
   # Workflow files stay safe (ops #1014): every action pinned to a full commit SHA, read-only default token, the
   # security scans (not required yet) keep their shape. Run locally: python3 -I .github/ci/test_workflow_pins.py
   workflow-pins:
@@ -172,7 +188,7 @@ jobs:
   # One stable name to require in branch protection. A failed or cancelled job fails it.
   checks-ok:
     if: always()
-    needs: [static, powershell, linux-host, release-hygiene, release-gate, release-assets-test, lima-pin, init-runtime, market-lookup, workflow-pins, push-checks]
+    needs: [static, powershell, linux-host, release-hygiene, release-gate, release-assets-test, lima-pin, init-runtime, market-lookup, downgrade-guard, workflow-pins, push-checks]
     runs-on: ubuntu-24.04
     steps:
       - env:

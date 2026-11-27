@@ -9,6 +9,7 @@ $script:TakwerxVersion = (Get-Content (Join-Path $App 'VERSION') -Raw).Trim()
 $script:FromApp = ($args -contains '--from-app')
 $argv = @($args | Where-Object { $_ -ne '--from-app' })
 
+. (Join-Path $App 'lib\windows\guard.ps1')
 . (Join-Path $App 'lib\windows\common.ps1')
 . (Join-Path $App 'lib\windows\host.ps1')
 . (Join-Path $App 'lib\windows\android.ps1')
@@ -59,6 +60,10 @@ function Invoke-Init([string[]]$a) {
         }
     }
     Step "takwerx $TakwerxVersion"
+    # The highest version that has run here: install.ps1 and takwerx update refuse to go below it.
+    if (Test-Semver $TakwerxVersion) {
+        if ($env:TAKWERX_ALLOW_DOWNGRADE -eq '1') { Set-Seen 'takwerx' $TakwerxVersion -Force } else { Set-Seen 'takwerx' $TakwerxVersion }
+    }
     Test-HostWindows
     Test-EmuHost
     Install-EmuSdk
@@ -166,8 +171,18 @@ function Invoke-LocationCmd([string[]]$a) {
 
 function Invoke-Update {
     Step 'Updating takwerx'
+    # A swap an earlier run left half done: put the old copy back before anything else.
+    if (-not (Test-Path $App) -and (Test-Path "$App.old")) { Rename-Item "$App.old" (Split-Path $App -Leaf) }
     $src = Get-TakwerxSource
-    if (-not $src) { Die 'Could not read the current takwerx version from GitHub' }
+    if (-not $src) { Die 'Could not read the current takwerx version from GitHub (no answer, or not a version number like 0.2.15)' }
+    $ver = ''
+    if (-not $env:TAKWERX_SOURCE -and -not $env:TAKWERX_BRANCH) {
+        $ver = ($src[1] -replace '^release ', '')
+        if ($env:TAKWERX_ALLOW_DOWNGRADE -ne '1') {
+            $why = Get-DowngradeMessage $ver $TakwerxVersion (Get-Seen 'takwerx')
+            if ($why) { Die $why }
+        }
+    }
     Step "Fetching takwerx ($($src[1]))"
     $zip = Join-Path $Cache 'app.zip'
     Remove-Item $zip -ErrorAction SilentlyContinue
@@ -175,11 +190,17 @@ function Invoke-Update {
     $new = "$App.new"
     if (Test-Path $new) { Remove-Item -Recurse -Force $new }
     Expand-Zip $zip $new 1
-    if (-not (Test-Path (Join-Path $new 'takwerx.ps1'))) { Die 'That takwerx has no Windows engine yet' }
+    if (-not (Test-Path (Join-Path $new 'takwerx.ps1'))) { Remove-Item -Recurse -Force $new -ErrorAction SilentlyContinue; Die 'That takwerx has no Windows engine yet' }
+    # The tag must hold what its name says, before it replaces the working copy.
+    if ($ver -and (Get-Content (Join-Path $new 'VERSION') -Raw).Trim() -ne $ver) {
+        Remove-Item -Recurse -Force $new -ErrorAction SilentlyContinue
+        Die "The download says it is not takwerx $ver; nothing changed"
+    }
     $old = "$App.old"
     if (Test-Path $old) { Remove-Item -Recurse -Force $old }
     Rename-Item $App (Split-Path $old -Leaf)
-    Rename-Item $new (Split-Path $App -Leaf)
+    try { Rename-Item $new (Split-Path $App -Leaf) }
+    catch { Rename-Item $old (Split-Path $App -Leaf); Die 'Could not put the new takwerx in place; the old one is back' }
     Remove-Item -Recurse -Force $old -ErrorAction SilentlyContinue
     & (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File (Join-Path $App 'takwerx.ps1') init --no-up
     # The new takwerx's init has restarted a running Android if it was the old one's.
