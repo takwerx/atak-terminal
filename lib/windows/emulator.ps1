@@ -538,7 +538,11 @@ function Stop-Emu {
     }
     for ($i = 0; $i -lt 45; $i++) { if (-not (Test-EmuRunning)) { return }; Start-Sleep -Seconds 1 }
     Warn 'Android did not power off within 45 seconds; stopping the emulator'
-    [void](Adb 'emu' 'kill')
+    # A frozen emulator process never answers `emu kill`, and Invoke-Quiet has no time limit:
+    # update and restart waited for ever (ops #1425; the Mac twin was ops #1423). After 10 s it
+    # is the Stop-Process below.
+    $killSeconds = if ($env:EMU_KILL_TIMEOUT) { [int]$env:EMU_KILL_TIMEOUT } else { 10 }
+    if (-not (Invoke-Timed $script:Adb @('-s', $script:Serial, 'emu', 'kill') $killSeconds)) { Log "stop: adb emu kill gave no answer in $killSeconds s; stopping the process" }
     Start-Sleep -Seconds 3
     $p = Get-EmuProcess
     if ($p) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
