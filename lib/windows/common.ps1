@@ -157,6 +157,32 @@ function Expand-Zip([string]$zip, [string]$dir, [int]$strip = 0) {
 function Get-ToolVersion([string]$dir) { $f = Join-Path $dir '.version'; if (Test-Path $f) { return (Get-Content $f -Raw).Trim() } return '' }
 function Set-ToolVersion([string]$dir, [string]$v) { Set-Content -Path (Join-Path $dir '.version') -Value $v -Encoding ASCII }
 
+# The highest versions that have run here, in state\highest (lines NAME=VALUE: takwerx, android_api), as
+# $TAKWERX_STATE/highest on the Mac (ops #1318). A lower value never replaces a higher one, unless -Force
+# (a downgrade the person asked for with TAKWERX_ALLOW_DOWNGRADE=1).
+function Get-Seen([string]$name) {
+    $f = Join-Path $State 'highest'
+    if (-not (Test-Path $f)) { return '' }
+    $v = ''
+    foreach ($l in Get-Content $f) { if ($l -match ('^' + [regex]::Escape($name) + '=(.*)$')) { $v = $Matches[1].Trim() } }
+    return $v
+}
+function Set-Seen([string]$name, [string]$val, [switch]$Force) {
+    if ($name -notmatch '^[a-z_]+$' -or $val -notmatch '^\d[0-9A-Za-z._-]*$') { return }
+    $have = Get-Seen $name
+    if ($have -and -not $Force -and -not (Test-VersionOlder $have $val)) { return }
+    $f = Join-Path $State 'highest'
+    $keep = @()
+    if (Test-Path $f) { $keep = @(Get-Content $f | Where-Object { $_ -notmatch ('^' + [regex]::Escape($name) + '=') }) }
+    Set-Content -Path $f -Value ($keep + "$name=$val") -Encoding ASCII
+}
+function Test-ToolStale([string]$name, [string]$dir, [string]$pin) {
+    $have = Get-ToolVersion $dir
+    $need = Test-ToolNeeds $have $pin
+    if (-not $need -and $have -ne $pin) { Warn "$name $have is newer than the $pin this takwerx pins; keeping $have" }
+    return $need
+}
+
 # ---- where takwerx comes from, and updates ---------------------------------------------------
 # Releases, as on the Mac: VERSION on main names the newest one, the tag v<VERSION> holds it.
 # TAKWERX_BRANCH takes a branch; TAKWERX_SOURCE any zip URL (a development server).
@@ -165,7 +191,7 @@ function Get-TakwerxSource {
     if ($env:TAKWERX_SOURCE) { return @($env:TAKWERX_SOURCE, 'development source') }
     if ($env:TAKWERX_BRANCH) { return @("https://github.com/$repo/archive/refs/heads/$($env:TAKWERX_BRANCH).zip", "branch $($env:TAKWERX_BRANCH)") }
     $ver = (Invoke-Quiet curl.exe -fsSL --max-time 10 "https://raw.githubusercontent.com/$repo/main/VERSION").Trim()
-    if (-not $ver) { return $null }
+    if (-not (Test-Semver $ver)) { return $null }
     return @("https://github.com/$repo/archive/refs/tags/v$ver.zip", "release $ver")
 }
 
@@ -177,11 +203,12 @@ function Update-Check([string]$mode = 'notify') {
     $fresh = $false
     if (-not (Test-Path $stamp) -or ((Get-Item $stamp).LastWriteTime -lt (Get-Date).AddDays(-1))) {
         $latest = (Invoke-Quiet curl.exe -fsSL --max-time 3 "https://raw.githubusercontent.com/$repo/main/VERSION").Trim()
+        if (-not (Test-Semver $latest)) { $latest = '' }
         Set-Content -Path $stamp -Value $latest -Encoding ASCII
         $fresh = $true
     }
     $latest = (Get-Content $stamp -Raw).Trim()
-    if (-not $latest -or $latest -eq $TakwerxVersion) { return }
+    if (-not (Test-Semver $latest) -or $latest -eq $TakwerxVersion) { return }
     try { if ([version]$latest -le [version]$TakwerxVersion) { return } } catch { return }
     if ($fresh) { Log "update available: $latest" }
     if ($mode -eq 'notify' -and $fresh) { Notify "takwerx $latest is available (you have $TakwerxVersion). In PowerShell: takwerx update" }

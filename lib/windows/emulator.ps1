@@ -132,7 +132,7 @@ function Get-Pinned([string]$url, [string]$name, [string]$sha256, [string[]]$see
 
 function Install-EmuSdk {
     $measure = Join-Path $env:LOCALAPPDATA 'takwerx-accel'
-    if ((Get-ToolVersion $EmuDir) -ne $V.EMULATOR_VERSION) {
+    if (Test-ToolStale 'emulator' $EmuDir $V.EMULATOR_VERSION) {
         Confirm-SdkLicense
         $zip = Get-Pinned "https://dl.google.com/android/repository/emulator-windows_x64-$($V.EMULATOR_BUILD).zip" `
             "emulator-windows_x64-$($V.EMULATOR_BUILD).zip" $V.EMULATOR_WIN_SHA256 @((Join-Path $measure 'emu.zip'))
@@ -141,11 +141,11 @@ function Install-EmuSdk {
         Expand-Zip $zip $Sdk
         Set-ToolVersion $EmuDir $V.EMULATOR_VERSION
     }
-    Ok "Android Emulator $($V.EMULATOR_VERSION)"
+    Ok "Android Emulator $(Get-ToolVersion $EmuDir)"
     # The hypervisor is asked through the emulator, so right after it and before the 1.7 GB
     # image: a PC that needs a restart first has fetched 0.44 GB, not 2.2.
     Test-Hypervisor
-    if ((Get-ToolVersion $SysImgDir) -ne $V.SYSIMG_REV) {
+    if (Test-ToolStale 'Android image' $SysImgDir $V.SYSIMG_REV) {
         Confirm-SdkLicense
         $zip = Get-Pinned "https://dl.google.com/android/repository/sys-img/$($V.SYSIMG_TAG)/x86_64-$($V.SYSIMG_API)_r$($V.SYSIMG_REV).zip" `
             "x86_64-$($V.SYSIMG_API)_r$($V.SYSIMG_REV).zip" $V.SYSIMG_X86_SHA256 @((Join-Path $measure 'sysimg.zip'))
@@ -156,8 +156,8 @@ function Install-EmuSdk {
         if (-not (Test-Path (Join-Path $SysImgDir 'system.img'))) { Die 'The Android image did not unpack' }
         Set-ToolVersion $SysImgDir $V.SYSIMG_REV
     }
-    Ok "Android $($V.SYSIMG_API) system image r$($V.SYSIMG_REV)"
-    if ((Get-ToolVersion $PtDir) -ne $V.PLATFORM_TOOLS_WIN_VERSION) {
+    Ok "Android $($V.SYSIMG_API) system image r$(Get-ToolVersion $SysImgDir)"
+    if (Test-ToolStale 'adb' $PtDir $V.PLATFORM_TOOLS_WIN_VERSION) {
         $zip = Get-Pinned "https://dl.google.com/android/repository/platform-tools_r$($V.PLATFORM_TOOLS_WIN_VERSION)-win.zip" `
             "platform-tools_r$($V.PLATFORM_TOOLS_WIN_VERSION)-win.zip" $V.PLATFORM_TOOLS_WIN_SHA256 @()
         if (Test-Path $Adb) { [void](Invoke-Quiet $Adb 'kill-server') }
@@ -165,7 +165,7 @@ function Install-EmuSdk {
         Expand-Zip $zip $Sdk
         Set-ToolVersion $PtDir $V.PLATFORM_TOOLS_WIN_VERSION
     }
-    Ok "Android platform tools $($V.PLATFORM_TOOLS_WIN_VERSION)"
+    Ok "Android platform tools $(Get-ToolVersion $PtDir)"
 }
 
 # Windows' own hypervisor platform, the one thing that needs an administrator, once. Already
@@ -267,37 +267,66 @@ function New-Avd {
     Ok ("Device {0}: {1} cores, {2} MB" -f $Avd, $s[1], $s[0])
 }
 
-# An existing device moves to the pinned Android image with its data (emu_upgrade_image on
-# the Mac): the emulator keeps the image's build number in version_num.cache and discards
-# the data partition when it changes, while Android upgrades the data in place as an OS
-# update does. So the new build number is written first. A copy of the device is kept until
-# Android has booted once, when the drive has room for it (NTFS copies for real).
+# An existing device moves to the pinned Android image with its data, when the device is on an OLDER
+# image (emu_upgrade_image on the Mac; the decision is Get-AvdMovePlan in guard.ps1). The emulator keeps
+# the image's build number in version_num.cache and discards the data partition when it changes, while
+# Android upgrades the data in place as an OS update does. So the new build number is written first. A
+# copy of the device is kept until Android has booted once and ATAK is there, when the drive has room for
+# it (NTFS copies for real). Never the other way (ops #1318): a device on a newer image, or whose data has
+# run on a newer Android, is not rewritten down to the pin. The copy is made under a .partial name and
+# renamed when whole. No build number, or no copy: stop, nothing changed.
 function Get-AvdSysdir { return ("system-images/android-{0}/{1}/x86_64/" -f $V.SYSIMG_API, $V.SYSIMG_TAG) }
 function Test-AvdImageCurrent {
     $ini = Join-Path $AvdHome "$Avd.avd\config.ini"
     if (-not (Test-Path $ini)) { return $true }
     return [bool](Select-String -Path $ini -SimpleMatch -Pattern ("image.sysdir.1=" + (Get-AvdSysdir)) -Quiet)
 }
+function Get-AvdDeviceApi {
+    $ini = Join-Path $AvdHome "$Avd.avd\config.ini"
+    if (-not (Test-Path $ini)) { return '' }
+    foreach ($l in Get-Content $ini) { if ($l -match '^image\.sysdir\.1=system-images/android-(\d+)/') { return $Matches[1] } }
+    return ''
+}
 function Update-AvdImage {
     if (Test-AvdImageCurrent) { return }
     $dir = Join-Path $AvdHome "$Avd.avd"; $ini = Join-Path $dir 'config.ini'
-    $old = ''
-    foreach ($l in Get-Content $ini) { if ($l -match '^image\.sysdir\.1=system-images/android-(\d+)/') { $old = $Matches[1] } }
+    $old = Get-AvdDeviceApi
+    $sysdir = ''
+    foreach ($l in Get-Content $ini) { if ($l -match '^image\.sysdir\.1=(.*)$') { $sysdir = $Matches[1].Trim() } }
     $build = ''
     $prop = Join-Path $SysImgDir 'build.prop'
     if (Test-Path $prop) { foreach ($l in Get-Content $prop) { if ($l -match '^ro\.build\.version\.incremental=(.+)$') { $build = $Matches[1].Trim(); break } } }
+    $imageHere = ($sysdir -ne '') -and (Test-Path (Join-Path (Join-Path $Sdk $sysdir) 'system.img'))
+    $plan = Get-AvdMovePlan $old ([string]$V.SYSIMG_API) (Get-Seen 'android_api') ([bool]$build) $imageHere
+    switch ($plan) {
+        'stop-id'  { Die "The device $Avd uses an Android image takwerx does not recognise ($sysdir). Nothing was changed. To start over on Android $($V.SYSIMG_API): takwerx reset" }
+        'stop-img' { Die "The device $Avd runs Android $old ($sysdir), which takwerx $TakwerxVersion does not have; it installs Android $($V.SYSIMG_API). Nothing was changed. Use the takwerx that made this device, or start over on Android $($V.SYSIMG_API): takwerx reset" }
+        'stop-new' { Die "The device $Avd has run Android $(Get-Seen 'android_api'), newer than the Android $($V.SYSIMG_API) this takwerx installs, so its data is not moved down. Nothing was changed. Use the newer takwerx, or start over: takwerx reset" }
+        'stop-bld' { Die "No build number in the Android $($V.SYSIMG_API) image, so the device $Avd was not moved and nothing was changed. Run takwerx init again to fetch the image" }
+        'leave'    { Warn "The device runs Android $old, newer than the Android $($V.SYSIMG_API) this takwerx installs. It is left as it is"; return }
+    }
     Step "Moving Android $old to Android $($V.SYSIMG_API); ATAK and its data stay (the first start takes a little longer)"
     $keep = "$dir.before-android$($V.SYSIMG_API)"
     if ((Test-Path (Join-Path $dir 'userdata-qemu.img.qcow2')) -and -not (Test-Path $keep)) {
         $size = (Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Sum Length).Sum
         $free = (Get-PSDrive -Name ((Split-Path $dir -Qualifier).TrimEnd(':'))).Free
+        $partial = "$keep.partial"
+        if (Test-Path $partial) { Remove-Item -Recurse -Force $partial -ErrorAction SilentlyContinue }
+        $made = $false
         if ($free -gt 2 * $size) {
-            Copy-Item -Recurse $dir $keep -ErrorAction SilentlyContinue
-            Get-ChildItem $keep -Filter '*.lock' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
-        } else { Warn ("Not enough free space to keep a copy of Android {0}'s data ({1:N1} GB); carrying on without one" -f $old, ($size / 1GB)) }
+            try {
+                Copy-Item -Recurse $dir $partial -ErrorAction Stop
+                Get-ChildItem $partial -Filter '*.lock' -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
+                Rename-Item $partial (Split-Path $keep -Leaf)
+                $made = $true
+            } catch { $made = $false }
+        }
+        if (-not $made) {
+            if (Test-Path $partial) { Remove-Item -Recurse -Force $partial -ErrorAction SilentlyContinue }
+            Die ("Could not keep a copy of Android {0}'s data ({1:N1} GB), so the device was not moved and nothing was changed. Free some disk space and run this again" -f $old, ($size / 1GB))
+        }
     }
-    if ($build) { [System.IO.File]::WriteAllText((Join-Path $dir 'version_num.cache'), $build) }
-    else { Warn "No build number in the Android $($V.SYSIMG_API) image; the emulator may start with empty data" }
+    [System.IO.File]::WriteAllText((Join-Path $dir 'version_num.cache'), $build)
     $lines = Get-Content $ini | ForEach-Object {
         if ($_ -match '^image\.sysdir\.1=') { 'image.sysdir.1=' + (Get-AvdSysdir) }
         elseif ($_ -match '^target=') { "target=android-$($V.SYSIMG_API)" }
@@ -308,12 +337,20 @@ function Update-AvdImage {
     if (Test-Path $top) { Set-Content -Path $top -Encoding ASCII -Value (Get-Content $top | ForEach-Object { if ($_ -match '^target=') { "target=android-$($V.SYSIMG_API)" } else { $_ } }) }
     Log "AVD $Avd moved from android-$old to android-$($V.SYSIMG_API) (build $build)"
 }
+# The copy of the old device goes only when Android has booted AND the device still has what the old one
+# had (Test-CopyMayGo): an empty device boots too, so where takwerx installed ATAK, ATAK must be there.
 function Complete-AvdUpgrade {
     $keep = Join-Path $AvdHome "$Avd.avd.before-android$($V.SYSIMG_API)"
-    if ((Test-Path $keep) -and (Test-AndroidBooted)) {
-        Remove-Item -Recurse -Force $keep -ErrorAction SilentlyContinue
-        Log "Android $($V.SYSIMG_API) booted with the device's data; the copy from before is removed"
+    if (-not (Test-Path $keep)) { return }
+    $booted = Test-AndroidBooted
+    if (-not $booted) { return }
+    $recorded = [bool](Get-Conf 'ATAK_APK')
+    if (-not (Test-CopyMayGo $booted $recorded ($recorded -and (Test-AtakInstalled)))) {
+        Log "ATAK is not on the device after the move to Android $($V.SYSIMG_API); the copy from before is kept at $keep"
+        return
     }
+    Remove-Item -Recurse -Force $keep -ErrorAction SilentlyContinue
+    Log "Android $($V.SYSIMG_API) booted with the device's data; the copy from before is removed"
 }
 
 # Written before every boot: the screen, RAM and cores. The physical density is three
@@ -322,6 +359,7 @@ function Set-AvdConfig {
     $ini = Join-Path $AvdHome "$Avd.avd\config.ini"
     if (-not (Test-Path $ini)) { Die "No Android device named $Avd (expected $ini)" }
     Update-AvdImage
+    Set-Seen 'android_api' (Get-AvdDeviceApi)
     $g = Get-EmuGeometry; $s = Get-EmuSizing
     $lines = @(Get-Content $ini | Where-Object { $_ -notmatch '^(hw\.lcd\.(width|height|density)|hw\.ramSize|hw\.cpu\.ncore)\s*=' })
     $lines += @("hw.lcd.width=$($g[0])", "hw.lcd.height=$($g[1])", ("hw.lcd.density={0}" -f [int]($g[2] * 3 / 4)), "hw.ramSize=$($s[0])", "hw.cpu.ncore=$($s[1])")

@@ -14,6 +14,14 @@ v=${1:-}
 die() { printf 'release: %s\n' "$*" >&2; exit 1; }
 [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "usage: ./release.sh X.Y.Z"
 [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || die "release from main"
+# Never a release below the newest one (ops #1318). Installed copies refuse to go back, and the
+# install line would hand a lower version to everyone: the tag names what users receive. The
+# newest is the highest vX.Y.Z tag here or on GitHub.
+newest=$({ git tag -l 'v[0-9]*.[0-9]*.[0-9]*'; { git ls-remote --tags --refs origin 'refs/tags/v*' 2>/dev/null | sed 's#.*refs/tags/##'; } || true; } \
+  | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -n1) || newest=''
+if [ -n "$newest" ] && [ "$v" != "$newest" ] && [ "$(printf '%s\n%s\n' "$v" "$newest" | sort -V | tail -n1)" = "$newest" ]; then
+  die "$v is lower than the newest release $newest. A release must be higher than the last one"
+fi
 # The install-and-update smoke must have passed for exactly this tree: the commit it ran on is
 # HEAD, or only VERSION and CHANGELOG.md changed since. reports/ is where it leaves its note.
 pass_file="${TAKWERX_SMOKE_DIR:-reports}/smoke-$v.pass"

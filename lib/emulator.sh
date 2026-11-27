@@ -101,8 +101,8 @@ emu_license() {
 # tenths of a GB. Windows: Test-EmuHost.
 emu_disk_check() {
   local need=0 free
-  [ "$(tool_version "$EMU_SDK/emulator")" = "$EMULATOR_VERSION" ] || need=$((need + 26))
-  [ "$(tool_version "$EMU_SYSIMG_DIR")" = "$SYSIMG_REV" ] || need=$((need + 56))
+  tool_needs emulator "$EMU_SDK/emulator" "$EMULATOR_VERSION" 2>/dev/null && need=$((need + 26))
+  tool_needs "Android image" "$EMU_SYSIMG_DIR" "$SYSIMG_REV" 2>/dev/null && need=$((need + 56))
   emu_has_data || need=$((need + EMU_DATA_GB * 12))
   [ "$need" -gt 0 ] || return 0
   need=$((need + 20))
@@ -115,7 +115,7 @@ emu_disk_check() {
 # re-fetched only when its pin changes and verified against its SHA-256 by download.
 emu_sdk_install() {
   local zip tmp
-  if [ "$(tool_version "$EMU_SDK/emulator")" != "$EMULATOR_VERSION" ]; then
+  if tool_needs emulator "$EMU_SDK/emulator" "$EMULATOR_VERSION"; then
     emu_license
     zip="$TAKWERX_CACHE/emulator-$EMU_ZIP_OS-$EMULATOR_BUILD.zip"
     download "https://dl.google.com/android/repository/emulator-$EMU_ZIP_OS-$EMULATOR_BUILD.zip" "$zip" "$EMU_ZIP_SHA"
@@ -126,8 +126,8 @@ emu_sdk_install() {
     printf '%s\n' "$EMULATOR_VERSION" >"$EMU_SDK/emulator/.version"
     [ "$HOST_OS" = linux ] || rm -rf "$EMU_DIR"  # the Mac's private copy is rebuilt from this
   fi
-  ok "Android Emulator $EMULATOR_VERSION"
-  if [ "$(tool_version "$EMU_SYSIMG_DIR")" != "$SYSIMG_REV" ]; then
+  ok "Android Emulator $(tool_version "$EMU_SDK/emulator")"
+  if tool_needs "Android image" "$EMU_SYSIMG_DIR" "$SYSIMG_REV"; then
     emu_license
     zip="$TAKWERX_CACHE/$EMU_ABI-${SYSIMG_API}_r$SYSIMG_REV.zip"
     download "https://dl.google.com/android/repository/sys-img/$SYSIMG_TAG/$EMU_ABI-${SYSIMG_API}_r$SYSIMG_REV.zip" "$zip" "$SYSIMG_ZIP_SHA"
@@ -137,10 +137,10 @@ emu_sdk_install() {
     rm -rf "$EMU_SYSIMG_DIR"; mkdir -p "$(dirname "$EMU_SYSIMG_DIR")"; mv "$tmp/$EMU_ABI" "$EMU_SYSIMG_DIR"; rm -rf "$tmp"
     printf '%s\n' "$SYSIMG_REV" >"$EMU_SYSIMG_DIR/.version"
   fi
-  ok "Android $SYSIMG_API system image r$SYSIMG_REV"
+  ok "Android $SYSIMG_API system image r$(tool_version "$EMU_SYSIMG_DIR")"
   # MoltenVK translates Vulkan to Metal on a Mac; Linux has its own Vulkan drivers.
   [ "$HOST_OS" = linux ] && return 0
-  if [ "$(tool_version "$EMU_MVK_DIR")" != "$MOLTENVK_VERSION" ]; then
+  if tool_needs MoltenVK "$EMU_MVK_DIR" "$MOLTENVK_VERSION"; then
     zip="$TAKWERX_CACHE/MoltenVK-macos-$MOLTENVK_VERSION.tar"
     download "https://github.com/KhronosGroup/MoltenVK/releases/download/v$MOLTENVK_VERSION/MoltenVK-macos.tar" "$zip" "$MOLTENVK_SHA256"
     rm -rf "$EMU_MVK_DIR"; mkdir -p "$EMU_MVK_DIR"
@@ -149,7 +149,7 @@ emu_sdk_install() {
     printf '%s\n' "$MOLTENVK_VERSION" >"$EMU_MVK_DIR/.version"
     rm -rf "$EMU_DIR"
   fi
-  ok "MoltenVK $MOLTENVK_VERSION"
+  ok "MoltenVK $(tool_version "$EMU_MVK_DIR")"
 }
 
 # takwerx's own copy of the emulator with the drivers it should have. The emulator loads
@@ -465,32 +465,64 @@ INI
 emu_sysdir() { printf 'system-images/android-%s/%s/%s/' "$SYSIMG_API" "$SYSIMG_TAG" "$EMU_ABI"; }
 emu_image_current() { grep -qx "image.sysdir.1=$(emu_sysdir)" "$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" 2>/dev/null; }
 
-# An existing device moves to the pinned Android image with its data. The emulator keeps
-# the image's build number in version_num.cache and throws the data partition away when it
-# changes; Android itself upgrades the data in place, as an OS update does on a phone
-# (measured 2026-09-27: a clone of a 14 device on 15 kept ATAK, 7 plugins, its settings
-# and 4.8 GB of files). So the new build number is written first, and the device is
-# cloned beside itself (APFS, costs nothing until the upgrade writes) until Android 15 has
-# booted once; emu_upgrade_done removes the copy.
+# An existing device moves to the pinned Android image with its data, when the device is on an
+# OLDER image. The emulator keeps the image's build number in version_num.cache and throws the
+# data partition away when it changes; Android itself upgrades the data in place, as an OS
+# update does on a phone (measured 2026-09-27: a clone of a 14 device on 15 kept ATAK, 7
+# plugins, its settings and 4.8 GB of files). So the new build number is written first, and the
+# device is cloned beside itself (APFS, costs nothing until the upgrade writes) until Android 15
+# has booted once; emu_upgrade_done removes the copy.
+# Never the other way (ops #1318): a device on a NEWER image (android-36, from a newer takwerx)
+# or on another flavor of the same Android is left as it is, and a device whose data has run on
+# a newer Android than the pin is not moved down. Whether Android 15 boots Android 16's data is
+# not known, so takwerx does not try. Anything it will not move stops with nothing changed.
+# The copy is made under a .partial name and renamed when whole, so a copy that was cut short
+# never counts as the copy, and never blocks the next try. No build number, or no copy: stop.
+emu_device_api() { sed -n 's/^image.sysdir.1=system-images\/android-\([0-9]*\)\/.*/\1/p' "$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" 2>/dev/null | head -n1; }
 emu_upgrade_image() {
-  local dir="$EMU_AVD_HOME/$EMU_AVD.avd" ini="$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" build old
+  local dir="$EMU_AVD_HOME/$EMU_AVD.avd" ini="$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" build old sysdir seen
+  local keep="$EMU_AVD_HOME/$EMU_AVD.avd.before-android$SYSIMG_API"
   emu_image_current && return 0
-  old=$(sed -n 's/^image.sysdir.1=system-images\/android-\([0-9]*\)\/.*/\1/p' "$ini")
-  build=$(sed -n 's/^ro.build.version.incremental=//p' "$EMU_SYSIMG_DIR/build.prop" 2>/dev/null | head -n1)
-  step "Moving Android $old to Android $SYSIMG_API; ATAK and its data stay (the first start takes a little longer)"
-  if [ -f "$dir/userdata-qemu.img.qcow2" ] && [ ! -d "$dir.before-android$SYSIMG_API" ]; then
-    { cp -cR "$dir" "$dir.before-android$SYSIMG_API" 2>/dev/null || cp -R "$dir" "$dir.before-android$SYSIMG_API" 2>/dev/null; } || warn "Could not keep a copy of Android $old's data; carrying on without one"
-    rm -rf "$dir.before-android$SYSIMG_API/"*.lock 2>/dev/null || true
+  old=$(emu_device_api)
+  sysdir=$(sed -n 's/^image.sysdir.1=//p' "$ini" | head -n1)
+  [[ $old =~ ^[0-9]+$ ]] || die "The device $EMU_AVD uses an Android image takwerx does not recognise ($sysdir). Nothing was changed. To start over on Android $SYSIMG_API: takwerx reset"
+  seen=$(seen_get android_api)
+  if [ "$old" -ge "$SYSIMG_API" ]; then
+    # Newer, or the same Android in another flavor: leave the device alone if its image is here.
+    [ -f "$EMU_SDK/$sysdir/system.img" ] \
+      || die "The device $EMU_AVD runs Android $old ($sysdir), which takwerx $TAKWERX_VERSION does not have; it installs Android $SYSIMG_API. Nothing was changed. Use the takwerx that made this device, or start over on Android $SYSIMG_API: takwerx reset"
+    warn "The device runs Android $old, newer than the Android $SYSIMG_API this takwerx installs. It is left as it is"
+    return 0
   fi
-  if [ -n "$build" ]; then printf '%s' "$build" >"$dir/version_num.cache"; else warn "No build number in the Android $SYSIMG_API image; the emulator may start with empty data"; fi
+  if [[ $seen =~ ^[0-9]+$ ]] && [ "$seen" -gt "$SYSIMG_API" ]; then
+    die "The device $EMU_AVD has run Android $seen, newer than the Android $SYSIMG_API this takwerx installs, so its data is not moved down to Android $SYSIMG_API. Nothing was changed. Use the newer takwerx, or start over: takwerx reset"
+  fi
+  build=$(sed -n 's/^ro.build.version.incremental=//p' "$EMU_SYSIMG_DIR/build.prop" 2>/dev/null | head -n1)
+  [ -n "$build" ] || die "No build number in the Android $SYSIMG_API image, so the device $EMU_AVD was not moved and nothing was changed. Run takwerx init again to fetch the image"
+  step "Moving Android $old to Android $SYSIMG_API; ATAK and its data stay (the first start takes a little longer)"
+  if [ -f "$dir/userdata-qemu.img.qcow2" ] && [ ! -d "$keep" ]; then
+    rm -rf "$keep.partial"
+    { cp -cR "$dir" "$keep.partial" 2>/dev/null || { rm -rf "$keep.partial"; cp -R "$dir" "$keep.partial" 2>/dev/null; }; } \
+      && rm -rf "$keep.partial/"*.lock 2>/dev/null \
+      && mv "$keep.partial" "$keep" \
+      || { rm -rf "$keep.partial"; die "Could not keep a copy of Android $old's data, so the device was not moved and nothing was changed. Free some disk space and run this again"; }
+  fi
+  printf '%s' "$build" >"$dir/version_num.cache"
   sed_inplace -e "s#^image.sysdir.1=.*#image.sysdir.1=$(emu_sysdir)#" -e "s#^target=.*#target=android-$SYSIMG_API#" "$ini"
   sed_inplace -e "s#^target=.*#target=android-$SYSIMG_API#" "$EMU_AVD_HOME/$EMU_AVD.ini" 2>/dev/null || true
   log "AVD $EMU_AVD moved from android-$old to android-$SYSIMG_API (build $build)"
 }
+# The copy of the old device goes only when Android has booted AND the device still has what
+# the old one had. An empty device boots too, so booting alone proves nothing: where takwerx
+# installed ATAK, ATAK must be there.
 emu_upgrade_done() {
   local keep="$EMU_AVD_HOME/$EMU_AVD.avd.before-android$SYSIMG_API"
   [ -d "$keep" ] || return 0
   android_booted || return 0
+  if [ -n "$(config_get ATAK_APK)" ] && ! atak_installed; then
+    log "ATAK is not on the device after the move to Android $SYSIMG_API; the copy from before is kept at $keep"
+    return 0
+  fi
   rm -rf "$keep" && log "Android $SYSIMG_API booted with the device's data; the copy from before is removed"
 }
 
@@ -498,6 +530,7 @@ emu_configure_avd() {
   local ini="$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" w h dpi ram cores
   [ -f "$ini" ] || die "No AVD named $EMU_AVD (expected $ini)"
   emu_upgrade_image
+  seen_note android_api "$(emu_device_api)"
   read -r w h dpi <<<"$(emu_geometry)"
   read -r ram cores <<<"$(emu_sizing)"
   { grep -vE '^(hw\.lcd\.(width|height|density)|hw\.ramSize|hw\.cpu\.ncore)[[:space:]]*=' "$ini"

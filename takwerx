@@ -177,6 +177,10 @@ cmd_init() {
     shift
   done
   step "takwerx $TAKWERX_VERSION"
+  # The highest version that has run here: install.sh and takwerx update refuse to go below it.
+  if semver_ok "$TAKWERX_VERSION"; then
+    if [ "${TAKWERX_ALLOW_DOWNGRADE:-0}" = 1 ]; then seen_note takwerx "$TAKWERX_VERSION" force; else seen_note takwerx "$TAKWERX_VERSION"; fi
+  fi
   host_check
   host_tools_install
   path_setup
@@ -529,13 +533,25 @@ cmd_update() {
   if [ -d "$TAKWERX_APP/.git" ]; then
     git -C "$TAKWERX_APP" pull --ff-only || die "git pull failed"
   else
-    local src url what new="$TAKWERX_APP.new"
-    src=$(takwerx_source) || die "Could not read the current takwerx version from GitHub"
+    local src url what new="$TAKWERX_APP.new" ver why
+    # A swap an earlier run left half done: put the old copy back before anything else.
+    if [ ! -d "$TAKWERX_APP" ] && [ -d "$TAKWERX_APP.old" ]; then mv "$TAKWERX_APP.old" "$TAKWERX_APP"; fi
+    src=$(takwerx_source) || die "Could not read the current takwerx version from GitHub (no answer, or not a version number like 0.2.15)"
     read -r url what <<<"$src"
+    if [ -z "${TAKWERX_BRANCH:-}" ]; then
+      ver=${what#release }
+      if why=$(takwerx_downgrade_refused "$ver"); then die "$why"; fi
+    fi
     step "Fetching takwerx ($what)"
     curl -fsSL "$url" -o "$TAKWERX_CACHE/app.tar.gz" || die "Download failed: $url"
     rm -rf "$new"; mkdir -p "$new"; tar -xzf "$TAKWERX_CACHE/app.tar.gz" -C "$new" --strip-components=1
-    rm -rf "$TAKWERX_APP.old"; mv "$TAKWERX_APP" "$TAKWERX_APP.old"; mv "$new" "$TAKWERX_APP"; rm -rf "$TAKWERX_APP.old"
+    # The tag must hold what its name says, before it replaces the working copy.
+    [ -f "$new/takwerx" ] || { rm -rf "$new"; die "The download is not takwerx; nothing changed"; }
+    if [ -z "${TAKWERX_BRANCH:-}" ] && [ "$(tr -d '[:space:]' <"$new/VERSION" 2>/dev/null)" != "$ver" ]; then
+      rm -rf "$new"; die "The download says it is not takwerx $ver; nothing changed"
+    fi
+    rm -rf "$TAKWERX_APP.old"; mv "$TAKWERX_APP" "$TAKWERX_APP.old"
+    if mv "$new" "$TAKWERX_APP"; then rm -rf "$TAKWERX_APP.old"; else mv "$TAKWERX_APP.old" "$TAKWERX_APP"; die "Could not put the new takwerx in place; the old one is back"; fi
   fi
   exec "$TAKWERX_APP/takwerx" init --no-up --no-bridged
 }

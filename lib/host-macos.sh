@@ -32,20 +32,20 @@ host_check() {
 # Homebrew is not used.
 host_tools_install() {
   local tgz sum
-  if [ "$(tool_version "$LIMA_DIR")" != "$LIMA_VERSION" ]; then
+  if tool_needs Lima "$LIMA_DIR" "$LIMA_VERSION"; then
     tgz="$TAKWERX_CACHE/lima-$LIMA_VERSION-Darwin-$HOST_ARCH.tar.gz"
     sum=$(pin_sha256 LIMA) || exit 1
     download "https://github.com/lima-vm/lima/releases/download/v$LIMA_VERSION/lima-$LIMA_VERSION-Darwin-$HOST_ARCH.tar.gz" "$tgz" "$sum"
     unpack_to "$tgz" "$LIMA_DIR" "$LIMA_VERSION"
   fi
-  ok "Lima $LIMA_VERSION"
-  if [ "$(tool_version "$SCRCPY_DIR")" != "$SCRCPY_VERSION" ]; then
+  ok "Lima $(tool_version "$LIMA_DIR")"
+  if tool_needs scrcpy "$SCRCPY_DIR" "$SCRCPY_VERSION"; then
     tgz="$TAKWERX_CACHE/scrcpy-macos-$SCRCPY_ARCH-v$SCRCPY_VERSION.tar.gz"
     sum=$(pin_sha256 SCRCPY) || exit 1
     download "https://github.com/Genymobile/scrcpy/releases/download/v$SCRCPY_VERSION/scrcpy-macos-$SCRCPY_ARCH-v$SCRCPY_VERSION.tar.gz" "$tgz" "$sum"
     unpack_to "$tgz" "$SCRCPY_DIR" "$SCRCPY_VERSION" 1
   fi
-  ok "scrcpy $SCRCPY_VERSION"
+  ok "scrcpy $(tool_version "$SCRCPY_DIR")"
 }
 
 # Puts `takwerx` on the PATH for new terminals. The app icon uses the same launcher.

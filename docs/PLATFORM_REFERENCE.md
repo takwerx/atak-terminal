@@ -130,3 +130,24 @@ moves.
   checked on every PR by `.github/ci/release_hygiene.sh`.
 - On `dev` the version may carry a `-dev` suffix and be ahead of the newest tag.
 - Release notes are written for the testers, in plain words (CLAUDE.md).
+- **Nothing here moves a customer backwards (ops #1318, same trap as the Authentik redis crash loop,
+  ops #1306).** What is installed is never replaced by something older:
+  - The install line and `takwerx update` refuse a takwerx lower than the installed `VERSION` or
+    than the highest one that ran here (`$TAKWERX_ROOT/state/highest`, line `takwerx=X.Y.Z`),
+    unless `TAKWERX_ALLOW_DOWNGRADE=1`. The version `VERSION` on `main` names must be exactly
+    `X.Y.Z`, and the tag's own `VERSION` file must say the same, before the old copy is replaced.
+    `release.sh` refuses a version lower than the newest tag.
+  - A tool (Lima, scrcpy, emulator, system image revision, MoltenVK, adb) newer than its pin stays;
+    only a missing, unreadable or older one is installed (`tool_needs`).
+  - An Android device on a newer image (`android-36`) or another flavor of the pinned Android is left
+    as it is; a device is moved only from an OLDER image, and only with a whole copy of its data
+    (made under `.partial`, renamed when whole) and the image's build number. A device whose data
+    has run on a newer Android (`android_api=` in the same state file) is not moved down.
+    The copy goes only once Android booted and ATAK is there (where takwerx installed it).
+  - Assumed, never run: that Android 15 can boot data an Android 16 wrote. That is why it is refused.
+  - **Cannot be fixed for already-installed clients:** `takwerx update` runs the INSTALLED copy's
+    code before the swap, so releases before this guard (0.2.15 and older) still go to whatever
+    `VERSION` on `main` names. The guard protects from the release that ships it onward.
+    Clients of 0.1.x and 0.2.0 fetch `heads/main` of `takwerx-desktop` through the repository
+    rename redirect; `tools/release-smoke.sh` runs the update from the newest release, v0.2.0 and the
+    oldest release.

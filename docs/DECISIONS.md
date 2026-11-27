@@ -1470,3 +1470,20 @@ wins). If the emulator still refuses, `Invoke-EmuUp` quotes the refusal and name
 Not done: a software-drawing fallback (`swiftshader_indirect`); the DECISIONS above measured
 CPU drawing as far too slow for ATAK. Assumed, not seen on a real PC: that the check follows
 the selected chip.
+
+## 2026-11-26: takwerx never goes backwards (ops #1318)
+
+An audit of 0.2.15 after the Authentik redis crash loop (ops #1306) found the same trap in takwerx:
+`install.sh` and `takwerx update` fetched whatever `VERSION` on `main` named and replaced the app
+with `rm -rf; mv`, every tool pin was checked as `!= pin` (so a newer Lima or emulator became the
+older pinned one), and `emu_upgrade_image` rewrote any device not on exactly `android-35` to 35,
+including an `android-36` device, then removed its backup as soon as an empty device booted.
+Now: a lower takwerx is refused (installed `VERSION` or `state/highest`, override
+`TAKWERX_ALLOW_DOWNGRADE=1`); `VERSION` must be `X.Y.Z` and the tag must say so; the swap keeps
+`app.old` until `app` is in place and a half-done swap is undone at the next run; tools newer than
+the pin stay; a newer or odd device is not touched; the older-device move needs the build number and
+a whole copy (`.partial` until complete); the copy stays until ATAK is there; `release.sh` refuses
+a version lower than the newest tag. Same rules for Windows (`lib/windows/guard.ps1`).
+Proof: `.github/ci/test_downgrade_guard.sh`, `.github/ci/test_windows_guard.ps1`.
+Not done: a way to prove an Android 36 device boots on 35 (it is refused instead), and nothing
+protects clients that already run 0.2.15 or older, whose update code runs before the swap.
