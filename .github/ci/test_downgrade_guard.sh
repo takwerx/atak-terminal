@@ -27,6 +27,10 @@
 #   14. the copy is removed only when Android booted AND ATAK is there (where takwerx put ATAK)
 #   release.sh
 #   15. a version lower than the newest release: refused
+#   no state file (ops #1398: every install made by 0.2.15 or older, and every new one, has none)
+#   16. the real `takwerx init` goes past the banner and writes state/highest (it used to stop silently, exit 1)
+#   17. seen_get, seen_note and the downgrade guard under set -euo pipefail with no file, a file with
+#       no matching line, and a file that cannot be read: they go on, and the file is written
 set -uo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -339,6 +343,65 @@ t_release_lower() {
   cd "$WORK" || return 1
 }
 check "15 release.sh refuses a version lower than the newest release" t_release_lower
+
+# --- 16. the real `takwerx init` with no state/highest (ops #1398)
+# The script runs with set -euo pipefail; seen_note is the first thing init does after its banner.
+# Here host_check (the next line) is swapped for a marker that stops the run, so nothing is installed.
+t_init_no_state() {
+  local h out rc
+  h=$(fresh_home 16 0.2.15)                      # no state/highest, like any install from 0.2.15 or older
+  [ ! -e "$h/state/highest" ] || { echo "the scratch home has a state file"; return 1; }
+  [ "$(grep -c '^  host_check$' "$h/app/takwerx")" = 1 ] || { echo "takwerx has no single host_check line in cmd_init: update this test"; return 1; }
+  sed -i.bak 's/^  host_check$/  echo REACHED-HOST-CHECK; exit 77/' "$h/app/takwerx" && rm -f "$h/app/takwerx.bak"
+  out=$(HOME="$h/hm" TAKWERX_ROOT="$h" "$h/app/takwerx" init --no-up --no-bridged 2>&1 </dev/null); rc=$?
+  [ "$rc" = 77 ] && printf '%s' "$out" | grep -q REACHED-HOST-CHECK || { echo "init stopped at the version record (exit $rc), output:"; echo "$out"; return 1; }
+  [ "$(cat "$h/state/highest")" = "takwerx=0.2.15" ] || { echo "state/highest not written:"; cat "$h/state/highest" 2>&1; return 1; }
+  # and a second run, now that the file exists, still goes on
+  out=$(HOME="$h/hm" TAKWERX_ROOT="$h" "$h/app/takwerx" init --no-up --no-bridged 2>&1 </dev/null); rc=$?
+  [ "$rc" = 77 ] || { echo "second init stopped (exit $rc)"; echo "$out"; return 1; }
+}
+check "16 takwerx init with no state/highest goes on and writes it" t_init_no_state
+
+# --- 17. the state reads under set -euo pipefail
+t_state_reads() {
+  local h="$WORK/home-state17"
+  rm -rf "$h"; mkdir -p "$h"
+  (
+    set -euo pipefail
+    lib "$h"
+    set -euo pipefail                      # the libraries do not set it; takwerx and install.sh do
+    f="$TAKWERX_STATE/highest"
+    [ ! -e "$f" ] || { echo "state file exists before the test"; exit 1; }
+    [ -z "$(seen_get takwerx)" ] || { echo "seen_get is not empty with no file"; exit 1; }
+    have=$(seen_get android_api)           # the call in emu_upgrade_image
+    [ -z "$have" ] || exit 1
+    if takwerx_downgrade_refused 0.0.1 >/dev/null; then :; fi   # must not abort; with no file and an installed 0.2.x it may refuse
+    seen_note takwerx 0.2.16
+    [ "$(cat "$f")" = takwerx=0.2.16 ] || { echo "seen_note did not write the file: $(cat "$f")"; exit 1; }
+    # a file with other lines only
+    printf 'android_api=35\n' >"$f"
+    [ -z "$(seen_get takwerx)" ] || { echo "found a takwerx line in a file that has none"; exit 1; }
+    seen_note takwerx 0.2.16
+    [ "$(seen_get takwerx)" = 0.2.16 ] && [ "$(seen_get android_api)" = 35 ] || { echo "lines lost: $(cat "$f")"; exit 1; }
+    # the guard still sees a higher version when the file has one
+    seen_note takwerx 0.9.0
+    [ "$(seen_get takwerx)" = 0.9.0 ] || { echo "a higher version was not recorded"; exit 1; }
+    seen_note takwerx 0.3.0
+    [ "$(seen_get takwerx)" = 0.9.0 ] || { echo "a lower version replaced a higher one"; exit 1; }
+  ) || return 1
+  # a file that cannot be read (not as root: root reads everything)
+  if [ "$(id -u)" != 0 ]; then
+    chmod 000 "$h/state/highest"
+    (
+      set -euo pipefail
+      lib "$h"
+      set -euo pipefail
+      [ -z "$(seen_get takwerx)" ] || exit 1
+    ) || { chmod 600 "$h/state/highest"; echo "an unreadable state file stops seen_get"; return 1; }
+    chmod 600 "$h/state/highest"
+  fi
+}
+check "17 seen_get, seen_note and the guard go on with no file, no line or an unreadable file" t_state_reads
 
 [ "$FAILS" -eq 0 ] || { echo "downgrade guard tests FAILED ($FAILS)"; exit 1; }
 echo "downgrade guard tests passed"

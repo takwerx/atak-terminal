@@ -180,7 +180,10 @@ atak_ask_pick() {
 semver_ok() { [[ ${1:-} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
 # ver_lt A B: A is older than B. Only for values that look like versions.
 ver_lt() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]; }
-seen_get() { sed -n "s/^$1=//p" "$TAKWERX_STATE/highest" 2>/dev/null | tail -n1; }
+# seen_get NAME: the recorded value, or nothing. It must always return 0: every install made by 0.2.15
+# or older has no state/highest, and sed exits 2 on a missing file, which under `set -euo pipefail`
+# (takwerx, install.sh) ended `takwerx init` silently (ops #1398).
+seen_get() { [ -f "$TAKWERX_STATE/highest" ] || return 0; sed -n "s/^$1=//p" "$TAKWERX_STATE/highest" 2>/dev/null | tail -n1 || true; }
 # seen_note NAME VALUE [force]: raises the record; a lower value never replaces a higher one,
 # unless force (a downgrade the person asked for).
 seen_note() {
