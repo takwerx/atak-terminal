@@ -4,6 +4,7 @@
 #
 #   1. a fresh `install.sh` (no ~/.takwerx/app yet) prints no "No such file" line
 #   2. emu_stop returns only when the emulator process is gone (after the 45 s limit and the forced stop)
+#   2b. emu_stop still finishes when `adb emu kill` never answers (frozen emulator process; ops #1423)
 #   3. init_emulator does not open the APK file picker while Android is not answering on adb
 #      (the update sat 7 minutes on a macOS dialog), and still asks first when Android answers and ATAK is missing
 #   4. closing the terminal that started the emulator on Linux does not hang it up (QEMU shuts down on SIGHUP)
@@ -65,6 +66,30 @@ t_stop_waits() {
     if emu_running; then echo "emu_stop returned while the emulator was still listed as running"; exit 1; fi )
 }
 check "emu_stop returns only when the emulator process is gone" t_stop_waits
+
+# --- 2b. a frozen emulator: `adb emu kill` never answers (ops #1423) -----------------------------------
+# The stand-in adb hangs for 30 s on `emu kill`; the stand-in emulator ignores SIGTERM. emu_stop must
+# give up on adb after EMU_KILL_TIMEOUT (2 s here), then finish through kill and kill -9 in well under 30 s.
+t_stop_frozen() {
+  ( load
+    printf '#!/usr/bin/env bash\ncase "$*" in *"emu kill"*) : > "%s/asked"; exec sleep 30 ;; esac\nexit 0\n' "$WORK" > "$WORK/adb-frozen"; chmod +x "$WORK/adb-frozen"
+    ADB=$WORK/adb-frozen EMU_KILL_TIMEOUT=2
+    rm -f "$WORK/asked"
+    ( trap '' TERM; exec sleep 300 ) & fpid=$!
+    emu_pid() { echo "$fpid"; }
+    emu_running() { case "$(ps -o stat= -p "$fpid" 2>/dev/null)" in ''|*Z*) return 1 ;; esac; return 0; }
+    android_online() { return 1; }
+    start=$SECONDS
+    emu_stop
+    took=$((SECONDS - start))
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do emu_running || break; command sleep 0.1; done
+    alive=0; emu_running && alive=1
+    kill -9 "$fpid" 2>/dev/null || true
+    [ -e "$WORK/asked" ] || { echo "the stand-in adb was never asked to emu kill: the test proves nothing"; exit 1; }
+    if [ "$took" -ge 20 ]; then echo "emu_stop waited ${took} s for a frozen adb emu kill (limit: a few seconds)"; exit 1; fi
+    if [ "$alive" = 1 ]; then echo "the emulator process that ignores SIGTERM is still running after emu_stop"; exit 1; fi )
+}
+check "emu_stop finishes when adb emu kill never answers (frozen emulator)" t_stop_frozen
 
 # --- 3. the APK question waits for Android ------------------------------------------------------------
 t_init() { # t_init ONLINE(1|0): the order of "ASKED" and "UP" in init_emulator
