@@ -26,7 +26,9 @@ else
     || { echo "Could not read the current takwerx version from GitHub" >&2; exit 1; }
   semver_ok "$VER" || { echo "GitHub did not answer with a takwerx version number (got: ${VER:0:40}). Nothing changed" >&2; exit 1; }
   if [ "${TAKWERX_ALLOW_DOWNGRADE:-0}" != 1 ]; then
-    for have in "$(tr -d '[:space:]' <"$APP/VERSION" 2>/dev/null || true)" "$(sed -n 's/^takwerx=//p' "$ROOT/state/highest" 2>/dev/null | tail -n1)"; do
+    # `tr <file 2>/dev/null` still prints "No such file" when the file is missing: the shell opens the
+    # file before the 2>/dev/null takes effect. A fresh install has no VERSION yet (ops #1411).
+    for have in "$([ -r "$APP/VERSION" ] && tr -d '[:space:]' <"$APP/VERSION" || true)" "$(sed -n 's/^takwerx=//p' "$ROOT/state/highest" 2>/dev/null | tail -n1)"; do
       have=${have%%-*}
       semver_ok "$have" || continue
       if [ "$VER" != "$have" ] && [ "$(printf '%s\n%s\n' "$VER" "$have" | sort -V | head -n1)" = "$VER" ]; then

@@ -285,7 +285,7 @@ init_emulator() {
   # device has no ATAK. Asked after boot, the Android window covered the Terminal question
   # and the first install sat at Android's home screen (MacBook, 2026-11-25).
   local asked=0
-  if [ -z "$apk" ] && { [ ! -f "$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" ] || { emu_running && ! atak_installed; }; }; then
+  if [ -z "$apk" ] && { [ ! -f "$EMU_AVD_HOME/$EMU_AVD.avd/config.ini" ] || { emu_running && android_online && ! atak_installed; }; }; then
     apk=$(init_ask_apk); asked=1
   fi
   emu_up
