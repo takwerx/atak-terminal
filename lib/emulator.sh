@@ -616,10 +616,13 @@ emu_start() {
   if [ "$HOST_OS" = linux ]; then emu_start_linux; return 0; fi
   step "Starting Android on the GPU ($EMU_AVD, $(emu_geometry | awk '{print $1"x"$2" at "$3" dpi"}'))"
   log "emulator start: $(tool_version "$EMU_DIR")${EMU_FEATURES:+, features $EMU_FEATURES}${EMU_ARGS:+, args $EMU_ARGS}"
+  # Its own session, so closing the Terminal window that ran takwerx does not power Android off
+  # (own_session_init in lib/common.sh; ops #1431).
+  own_session_init
   # shellcheck disable=SC2086  # EMU_ARGS is a list of arguments
   ANDROID_SDK_ROOT="$EMU_SDK" ANDROID_HOME="$EMU_SDK" ANDROID_AVD_HOME="$EMU_AVD_HOME" ANDROID_EMU_VK_SELECT_ICD="$EMU_VK" \
     TAKWERX_FULLSCREEN="$(emu_fullscreen && echo 1 || echo 0)" TAKWERX_WINDOW_LOG="$TAKWERX_LOGS/emulator-window.log" TAKWERX_CONSOLE_PORT="$EMU_PORT" \
-    nohup "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu host \
+    nohup ${OWN_SESSION[@]+"${OWN_SESSION[@]}"} "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu host \
       -feature "Vulkan,GuestAngle,VirtioTablet,-WiFiPacketStream${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim $EMU_ARGS \
       >>"$EMU_LOG" 2>&1 </dev/null &
   disown 2>/dev/null || true
@@ -649,10 +652,10 @@ emu_start_linux() {
   # Its own session (setsid): QEMU treats SIGHUP as a power-off request and installs its own
   # handler, so nohup does not protect it, and closing the terminal that ran `takwerx init`
   # shut Android down (ops #1411). Without a controlling terminal there is no hangup to get.
-  local own=(); command -v setsid >/dev/null 2>&1 && own=(setsid)
+  own_session_init
   # shellcheck disable=SC2086  # EMU_ARGS is a list of arguments
   ANDROID_SDK_ROOT="$EMU_SDK" ANDROID_HOME="$EMU_SDK" ANDROID_AVD_HOME="$EMU_AVD_HOME" \
-    nohup "${own[@]}" "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu "$gpu" "${win[@]}" \
+    nohup ${OWN_SESSION[@]+"${OWN_SESSION[@]}"} "$EMU_DIR/emulator" -avd "$EMU_AVD" -port "$EMU_PORT" -gpu "$gpu" "${win[@]}" \
       -feature "$feats${EMU_FEATURES:+,$EMU_FEATURES}" -no-snapshot -no-boot-anim -accel on $EMU_ARGS \
       >>"$EMU_LOG" 2>&1 </dev/null &
   disown 2>/dev/null || true

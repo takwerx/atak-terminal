@@ -59,6 +59,26 @@ if { [ "$HOST_OS" = macos ] && [ "$HOST_ARCH" = arm64 ]; } || [ "$HOST_OS" = lin
 # How messages name the computer.
 if [ "$HOST_OS" = macos ]; then HOST_THIS="this Mac"; else HOST_THIS="this computer"; fi
 
+# A program that must outlive the terminal that started it runs in a session of its own.
+# Closing a Terminal window hangs up the terminal's session: the kernel sends SIGHUP to the
+# foreground process group. QEMU (the Android emulator) takes SIGHUP as a power-off request and
+# installs a handler of its own, so `nohup` does not protect it, and Android went off when the
+# window that ran `takwerx init` was closed (Linux, ops #1411; Mac, ops #1431). macOS has no
+# `setsid` command; perl, which lib/apk-icon.pl needs anyway, makes the same system call and
+# then runs the program in place (same process, same command line). With neither, the program
+# starts as before, under nohup alone.
+#   own_session_init; nohup ${OWN_SESSION[@]+"${OWN_SESSION[@]}"} PROGRAM ARGS... &
+# (the + form: the Mac's bash 3.2 calls an empty array an unset variable under set -u.)
+own_session_init() {
+  # shellcheck disable=SC2034  # read by the callers in lib/emulator.sh
+  OWN_SESSION=()
+  if command -v setsid >/dev/null 2>&1; then
+    OWN_SESSION=(setsid)
+  elif command -v perl >/dev/null 2>&1; then
+    OWN_SESSION=(perl -MPOSIX -e 'POSIX::setsid(); exec { $ARGV[0] } @ARGV or die "takwerx: cannot run $ARGV[0]: $!\n"' --)
+  fi
+}
+
 if [ -t 1 ]; then
   BOLD=$'\033[1m'; RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[0;33m'; DIM=$'\033[2m'; NC=$'\033[0m'
 else
