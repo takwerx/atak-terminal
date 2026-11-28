@@ -120,5 +120,9 @@ try {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
 
+# The check above leaves LASTEXITCODE at 3 (a program that exits 3 on purpose), and the CI step for
+# `shell: pwsh` ends with that number if it is set. Clear it, and end on our own word.
+$global:LASTEXITCODE = 0
 if ($fail) { Write-Host "$fail check(s) failed"; exit 1 }
 Write-Host 'all checks passed'
+exit 0
