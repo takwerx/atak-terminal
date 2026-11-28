@@ -24,6 +24,9 @@ $script:EmuLog    = Join-Path $Logs 'emulator.log'
 $script:EmuGpu    = Get-Conf 'EMU_GPU' ''
 $script:EmuFeatures = Get-Conf 'EMU_FEATURES' ''
 $script:EmuArgs   = Get-Conf 'EMU_ARGS' ''
+# DNS servers for Android: 'public' (1.1.1.1,8.8.8.8), addresses, or empty for the PC's own
+# (lib/windows/dns.ps1; takwerx sets 'public' itself on a PC where names do not resolve).
+$script:EmuDns    = Get-Conf 'EMU_DNS' ''
 # Google apps the terminal has no use for, switched off at every boot; Chrome stays (it
 # opens TAK Portal enrolment links). Play services goes too: its location providers flooded
 # the log (DECISIONS 2026-09-26).
@@ -410,6 +413,7 @@ function Start-Emu {
     $features = 'Vulkan,GuestAngle,VirtioTablet,-WiFiPacketStream'
     if ($EmuFeatures) { $features += ",$EmuFeatures" }
     $argv = @('-avd', $Avd, '-port', "$EmuPort", '-gpu', 'host', '-feature', $features, '-no-snapshot', '-no-boot-anim')
+    $argv += @(Get-EmuDnsArgs $EmuDns $EmuArgs)
     if ($EmuArgs) { $argv += ($EmuArgs -split '\s+') }
     Log ("emulator start: {0}, {1}" -f (Get-ToolVersion $EmuDir), ($argv -join ' '))
     Start-Process -FilePath $Emulator -ArgumentList (($argv | ForEach-Object { Quote-Arg $_ }) -join ' ') -WorkingDirectory $EmuDir `
@@ -500,6 +504,40 @@ function Start-Watcher {
     return $true
 }
 
+$script:DnsChecked = $false
+# Android on some PCs reaches an address given as numbers but cannot look up any name (atak-terminal
+# #44). Probes from inside Android; on a clear case saves EMU_DNS=public and restarts Android once
+# so that Start-Emu adds the emulator's -dns-server. Returns $true when it restarted Android.
+# Never stops takwerx: any error is logged and skipped. Once per takwerx run.
+function Repair-AndroidDns {
+    if ($script:DnsChecked) { return $false }
+    $script:DnsChecked = $true
+    try {
+        # The user (or an earlier run of this) already chose the DNS: leave it alone.
+        if ($EmuDns -or ("$EmuArgs" -match '-dns-server')) { return $false }
+        $tries = @()
+        $verdict = 'wait'
+        for ($i = 0; $i -lt 6 -and $verdict -eq 'wait'; $i++) {
+            if ($i -gt 0) { Start-Sleep -Seconds 2 }
+            $ip = AdbSh 'ping' '-c' '1' '-W' '2' '1.1.1.1'
+            $name = ''
+            if (Test-PingReply $ip) { $name = AdbSh 'ping' '-c' '1' '-W' '5' 'one.one.one.one' }
+            $tries += ,@($ip, $name)
+            $verdict = Get-DnsVerdict $tries
+        }
+        Log "dns check: $verdict"
+        if ($verdict -ne 'broken') { return $false }
+        Set-Conf 'EMU_DNS' 'public'
+        $script:EmuDns = 'public'
+        Warn "Android reaches the internet but cannot look up names on this PC. Restarting it once with public DNS (1.1.1.1, 8.8.8.8). To go back to this PC's own DNS, delete the EMU_DNS line in $Config and run: takwerx restart"
+        Stop-Emu
+        return $true
+    } catch {
+        Log "dns check skipped: $_"
+        return $false
+    }
+}
+
 $script:Provisioned = $false
 function Invoke-EmuUp {
     Start-Emu
@@ -514,6 +552,8 @@ function Invoke-EmuUp {
         }
     }
     Ok 'Android is up'
+    # A PC where Android cannot look up names: public DNS, one restart (ops #1466).
+    if (Repair-AndroidDns) { Invoke-EmuUp; return }
     Complete-AvdUpgrade
     [void](Start-Watcher)
     if (-not $script:Provisioned) {
