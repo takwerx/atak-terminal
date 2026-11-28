@@ -425,6 +425,7 @@ function Wait-Emu([int]$seconds = 300) {
     $start = Get-Date
     Start-AdbServer
     $watched = $false
+    $slow = $false
     while (((Get-Date) - $start).TotalSeconds -lt $seconds) {
         if (-not $watched) { $watched = Start-Watcher }
         if (((Get-Date) - $start).TotalSeconds -lt 90 -and (Test-EmuSoftwareGpu)) {
@@ -432,7 +433,13 @@ function Wait-Emu([int]$seconds = 300) {
             if ($p) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
             Stop-SoftwareGpu ((Get-HostGpus | ForEach-Object { $_[0] }) -join ', ')
         }
-        if ((Test-AndroidOnline) -and (Test-AndroidBooted)) { return $true }
+        # Each adb call gets its own limit, and never more than what is left of the wait, so one
+        # call that does not answer cannot outlast it (ops #1436: it sat 16 minutes). No answer
+        # counts as "not up yet".
+        $left = [int][Math]::Ceiling($seconds - ((Get-Date) - $start).TotalSeconds)
+        $per = [Math]::Min($script:ProbeSeconds, [Math]::Max(1, $left))
+        if ((Test-AndroidOnline $per) -and (Test-AndroidBooted $per)) { return $true }
+        if ($global:LASTEXITCODE -eq 124 -and -not $slow) { $slow = $true; Log "adb gave no answer within $per s while waiting for Android; still waiting" }
         if (-not (Test-EmuRunning) -and ((Get-Date) - $start).TotalSeconds -gt 30) { return $false }
         Start-Sleep -Seconds 2
     }
@@ -510,6 +517,8 @@ function Invoke-EmuUp {
             $extra = if (Test-Path $keep) { ". The device from before the move to Android $($V.SYSIMG_API) is kept at $keep" } else { '' }
             $refusal = Get-GpuRefusal (Read-EmuLog)
             if ($refusal) { Die ("The Android Emulator refused this PC's graphics driver: {0}. Update the graphics driver from the maker's site, or, on a PC with a second graphics chip, run 'takwerx gpu Intel' (or AMD), then 'takwerx restart'. See {1}" -f $refusal, $EmuLog) }
+            $nogpu = Get-GpuMissing (Read-EmuLog)
+            if ($nogpu) { Die ("The Android Emulator found no graphics chip it can use on this PC (its log says: {0}). It needs a graphics chip with a Vulkan driver. Install the graphics driver from the PC's maker, or use a PC with a real graphics chip: a virtual machine or cloud PC with no GPU cannot run takwerx. See {1}" -f $nogpu, $EmuLog) }
             Die "Android did not come up (the emulator exited or took over 5 minutes). See $EmuLog$extra"
         }
     }

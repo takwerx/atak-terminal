@@ -110,6 +110,44 @@ function Invoke-Quiet {
     return ((@($o) | ForEach-Object { "$_" }) -join "`n").Replace("`r", '').TrimEnd()
 }
 
+# Invoke-Limited SECONDS EXE ARGUMENTS: Invoke-Quiet with a time limit, the twin of with_timeout in
+# lib/android.sh. A program still running after SECONDS is killed and gives '' with LASTEXITCODE 124,
+# so the caller reads it as "no answer". One adb call that never returns (a PC whose emulator started
+# badly: getprop sat 16 minutes, ops #1436) must not hold takwerx past its own wait. The output is
+# read on the side and not waited for after the program has gone, so a child that keeps the pipe open
+# cannot hold it either.
+function Invoke-Limited([int]$seconds, [string]$exe, [string[]]$arguments = @()) {
+    $cmd = Get-Command $exe -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $cmd) { $global:LASTEXITCODE = 127; return '' }
+    $p = $null
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $cmd.Source
+        $psi.Arguments = (@($arguments | ForEach-Object { Quote-Arg "$_" }) -join ' ')
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $p = [System.Diagnostics.Process]::Start($psi)
+        $out = $p.StandardOutput.ReadToEndAsync()
+        $err = $p.StandardError.ReadToEndAsync()
+        if (-not $p.WaitForExit([Math]::Max(1, $seconds) * 1000)) {
+            try { $p.Kill() } catch { }
+            [void]$p.WaitForExit(2000)
+            $global:LASTEXITCODE = 124
+            return ''
+        }
+        $global:LASTEXITCODE = $p.ExitCode
+        if (-not $out.Wait(2000)) { return '' }
+        return ("$($out.Result)").Replace("`r", '').TrimEnd()
+    } catch {
+        $global:LASTEXITCODE = 127
+        return ''
+    } finally {
+        if ($p) { $p.Dispose() }
+    }
+}
+
 # Quotes one argument for a Windows command line (Start-Process joins an array unquoted).
 function Quote-Arg([string]$a) {
     if ($a -notmatch '[\s"]' -and $a.Length -gt 0) { return $a }

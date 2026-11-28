@@ -17,6 +17,7 @@ name: PR checks
 #   bash .github/ci/test_downgrade_guard.sh   (install line, update, tools and the Android device never go backwards; ops #1318)
 #   bash .github/ci/test_update_edges.sh   (no raw error on a fresh install, update waits for the emulator to stop, no file picker mid-update, Linux emulator survives a closed terminal; ops #1411)
 #   pwsh -File .github/ci/test_windows_guard.ps1   (the same rules for the Windows engine; ops #1318)
+#   pwsh -File .github/ci/test_windows_adb.ps1   (the Windows wait for Android has a limit per adb call; ops #1436)
 on:
   pull_request:
     branches: [dev, main]
@@ -69,6 +70,10 @@ jobs:
       # Never go backwards: the Windows engine's version, tool and Android device decisions (ops #1318).
       - shell: pwsh
         run: ./.github/ci/test_windows_guard.ps1
+      # The wait for Android ends at its own limit when one adb call never answers, and a PC with no
+      # graphics gets its own message (ops #1436). Runs the shipped functions against a fake adb.
+      - shell: pwsh
+        run: ./.github/ci/test_windows_adb.ps1
 
   # The Linux host: pins present, engine starts, GNU-userland helpers, launcher entry (ops #528).
   # Needs no KVM and downloads nothing.

@@ -30,8 +30,13 @@ function Start-AdbServer {
     if ($srv) { Set-Content -Path $mark -Value $srv -Encoding ASCII }
 }
 
-function Test-AndroidOnline { return ((Invoke-Quiet $script:Adb '-s' $script:Serial 'get-state') -eq 'device') }
-function Test-AndroidBooted { return ((AdbSh 'getprop' 'sys.boot_completed') -eq '1') }
+# The "is Android up" probes carry a time limit (ops #1436): one adb call that never answers held
+# "Waiting for Android to boot" for 30 minutes on a PC whose emulator started badly, because the wait
+# checked its 5 minutes only between calls. A probe that hits the limit counts as "not up yet"
+# (lib/android.sh does the same: android_state 10 s, adb_sh 30 s).
+$script:ProbeSeconds = 15
+function Test-AndroidOnline([int]$seconds = $script:ProbeSeconds) { return ((Invoke-Limited $seconds $script:Adb @('-s', $script:Serial, 'get-state')) -eq 'device') }
+function Test-AndroidBooted([int]$seconds = $script:ProbeSeconds) { return ((Invoke-Limited $seconds $script:Adb @('-s', $script:Serial, 'shell', 'getprop', 'sys.boot_completed')) -eq '1') }
 
 # Runs a shell script inside Android. Pushed as a file, so no quoting survives the trip
 # through PowerShell 5.1 and adb (it drops embedded double quotes).
