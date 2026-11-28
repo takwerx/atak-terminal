@@ -40,13 +40,13 @@ Check 'refusal found in the emulator log' ($r -like 'GPU driver is not supported
 Check 'refusal has no log prefix or CR'   ($r -match '[\r\n|]') 'False'
 Check 'a clean log has no refusal'        (Get-GpuRefusal "INFO | Graphics backend: gfxstream`r`nINFO | boot completed") ''
 
-# A PC with no usable graphics at all (ops #1436): a Windows 11 cloud PC with no GPU. The emulator
-# logs "Could not detect GPU for Vulkan compatibility checks" and Android never boots. The wording
-# around the line is not known, so the line is tried bare and with a log prefix.
+# A PC with no usable graphics at all (ops #1436): a Windows 11 cloud PC with no GPU (Azure, Windows 11
+# 24H2, 4 vCPU, 2026-11-27). The emulator's standard output, as it came back, ends Android's boot.
 $gone = 'Could not detect GPU for Vulkan compatibility checks'
+$noGpuLog = "ERROR        | emuglConfig_get_vulkan_hardware_gpu_support_info: Failed to create vulkan instance. Error: [VK_ERROR_INCOMPATIBLE_DRIVER] -9`r`nINFO         |      Error: Could not detect GPU for Vulkan compatibility checks. Please try updating your GPU Drivers`r`nFATAL        | Could not detect GPU for Vulkan compatibility checks. Please try updating your GPU Drivers.`r`n"
+Check 'no-GPU log from the real PC'    (Get-GpuMissing $noGpuLog) $gone
 Check 'no-GPU line, bare'              (Get-GpuMissing $gone) $gone
 Check 'no-GPU line, with a log prefix' (Get-GpuMissing "INFO         |   Checking: hasSufficientHwGpu`r`nWARNING      | $gone`r`nINFO | next") $gone
-Check 'no-GPU line, with a full stop'  (Get-GpuMissing "WARNING | $gone.") $gone
 Check 'a clean log is not no-GPU'      (Get-GpuMissing "INFO | Graphics backend: gfxstream`r`nINFO | boot completed") ''
 Check 'the old-driver refusal is not no-GPU' (Get-GpuMissing $log) ''
 Check 'no-GPU is not an old-driver refusal'  (Get-GpuRefusal $gone) ''
@@ -80,14 +80,14 @@ function Say-Up([string]$logText) {
     $script:FixtureLog = $logText
     try { Invoke-EmuUp; return 'no error' } catch { return $_.Exception.Message }
 }
-$m = Say-Up "WARNING | $gone"
+$m = Say-Up $noGpuLog
 Check 'no GPU: the message names the missing graphics chip'  ($m -like '*no graphics chip it can use*') 'True'
 Check 'no GPU: the message quotes the emulator line'         ($m -like "*$gone*") 'True'
 Check 'no GPU: the message points to the log'                ($m -like '*emulator.log*') 'True'
 Check 'no GPU: not the generic line'                         ($m -like 'Android did not come up*') 'False'
 $m = Say-Up $log
 Check 'old driver: still its own message'                    ($m -like '*refused this PC*graphics driver*') 'True'
-$m = Say-Up "INFO | $gone`r`n$log"
+$m = Say-Up ($noGpuLog + $log)
 Check 'old driver beside the no-GPU line: the refusal wins'  ($m -like '*refused this PC*graphics driver*') 'True'
 $m = Say-Up "INFO | Graphics backend: gfxstream"
 Check 'neither: the generic line stays'                      ($m -like 'Android did not come up*') 'True'

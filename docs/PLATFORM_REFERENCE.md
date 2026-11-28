@@ -80,6 +80,15 @@ moves.
   driver as `30.0.14.7514`; NVIDIA's number is its last five digits (`475.14`). ✅ the refusal
   text, 2026-11-09 from a user's `emulator.log` (atak-terminal #19). ❓ Not verified on a real
   PC: that `ANDROID_EMU_VK_SELECT_GPU=Intel` makes the check judge the Intel chip instead.
+- **No graphics chip at all on Windows (a cloud PC or virtual machine):** the emulator cannot create
+  a Vulkan instance (`VK_ERROR_INCOMPATIBLE_DRIVER`), logs `FATAL | Could not detect GPU for Vulkan
+  compatibility checks. Please try updating your GPU Drivers.` to its standard output
+  (`emulator.log`, not the `.err` file) and exits; Android never boots. ✅ verified 2026-11-27 on a
+  Windows 11 Pro 24H2 Azure VM (Standard_D4s_v6, only `Microsoft Hyper-V Video`, WHPX on), emulator
+  37.1.11 (ops #1436). takwerx reads that line (`Get-GpuMissing`) to say so in its error.
+  With `-gpu swiftshader_indirect` the same box does not boot reliably: `netsimd.exe` crashes at start
+  and qemu exits within about 90 s in 4 of 5 tries (ops #1376); in one try qemu ran 16 minutes with
+  adb never answering, the hang `Invoke-Limited` now bounds.
 - **Hypervisor:** `emulator -accel-check`; on Windows 11 with virtualization-based security,
   Windows' own hypervisor is enough, no WHPX switch needed. ✅ 2026-09-27 on the Dell (DECISIONS 2026-09-27 afternoon).
 - **Image upgrade keeps data** only if `version_num.cache` is written with the new build number

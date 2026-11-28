@@ -45,11 +45,14 @@ function Get-GpuRefusal([string]$logText) {
     return ''
 }
 
-# The emulator's word when it finds no graphics chip it can use at all, from its log: the sentence,
-# or ''. Seen on a Windows 11 cloud PC with no GPU (ops #1436, Azure, 2026-11-27): the emulator logs
-# "Could not detect GPU for Vulkan compatibility checks" (Vulkan answers VK_ERROR_INCOMPATIBLE_DRIVER)
-# and Android never boots. Not the same as Get-GpuRefusal: no driver update of a chip that is there helps.
+# The emulator's word when it finds no graphics chip it can use at all, from its log: the first
+# sentence, or ''. Seen on a Windows 11 cloud PC with no GPU (ops #1436, Azure, 2026-11-27), in the
+# emulator's standard output:
+#   ERROR | emuglConfig_get_vulkan_hardware_gpu_support_info: Failed to create vulkan instance. Error: [VK_ERROR_INCOMPATIBLE_DRIVER] -9
+#   FATAL | Could not detect GPU for Vulkan compatibility checks. Please try updating your GPU Drivers.
+# and Android never boots. Not the same as Get-GpuRefusal (a chip that is there, with a driver that is
+# too old).
 function Get-GpuMissing([string]$logText) {
-    if ("$logText" -match '(?m)Could not detect GPU[^\r\n]*') { return $Matches[0].TrimEnd('.', ' ') }
+    if ("$logText" -match '(?m)Could not detect GPU[^.\r\n]*') { return $Matches[0].TrimEnd(' ') }
     return ''
 }
