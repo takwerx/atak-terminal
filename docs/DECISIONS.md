@@ -1508,3 +1508,18 @@ are closed in the code and each has a test. Where each is explained and what is 
 The older-release gap this audit found first (`takwerx update` accepting an older release) is closed by
 ops #1318 above; the two fit: #1318 stops the app going back, this one stops the Android data
 being met by an older image.
+
+## 2026-11-28: Android cannot look up names on some Windows PCs (atak-terminal #44, ops #1466)
+
+A Windows 11 PC (0.2.15) had Android reach addresses but resolve no name until the reporter put
+`EMU_ARGS=-dns-server 1.1.1.1,8.8.8.8` in the config. Always passing public DNS would cut off a TAK
+server that only the PC's own DNS knows (a VPN, NetBird, an office name), and every PC that works
+today would change. So `Repair-AndroidDns` (`lib/windows/emulator.ps1`, pure parts in
+`lib/windows/dns.ps1`) measures first, after Android is up: ping 1.1.1.1 (number) and
+one.one.one.one (name). Only when the number answers and the name does not, in two tries in a
+row, it saves `EMU_DNS=public`, says so, and restarts Android once with the option. No internet
+(number never answers) changes nothing. A `-dns-server` in `EMU_ARGS` or any `EMU_DNS` value
+(`off` included) is the user's choice and is never overridden. Undo: delete the `EMU_DNS` line.
+Not done: the Mac and redroid runtimes (no report). Not tested on a real Windows PC (the
+emulator cannot run on an Azure Windows box); the decision functions have a proof test
+(`.github/ci/test_windows_dns.ps1`).

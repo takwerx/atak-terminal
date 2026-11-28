@@ -96,6 +96,14 @@ moves.
 - **Qt's compiled-in `qt.conf` and the window title format string** are patched in our private
   copy; the revision tag in `emu_prepare` must change whenever the patch does (CLAUDE.md,
   DECISIONS 2026-09-27).
+- **DNS (`-dns-server`):** by default the emulator hands Android the PC's own DNS servers. On one
+  Windows 11 PC (0.2.15, atak-terminal #44) Android could not look up any name (Chrome included) until
+  `-dns-server 1.1.1.1,8.8.8.8` was added. That fix is the reporter's word; we have not seen the
+  failure. On the Mac emulator (tak-dev, 2026-11-28) the option is accepted and appears on the process
+  line, but a run with only a dead server (`192.0.2.1`) still resolved names, so the Mac emulator seems
+  to fall back to the host's DNS: failover between the listed servers is NOT proven, and the Windows
+  failure cannot be reproduced on a Mac. takwerx uses the option only where it measured the failure
+  (DECISIONS 2026-11-28).
 
 ## Host platforms
 
